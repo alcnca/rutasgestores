@@ -1,98 +1,113 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8">
   <title>Rutas de Gestores</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
   <style>
-    #map { height: 100vh; }
-    .selector { margin: 10px; }
+    #map { height: 90vh; width: 100%; }
   </style>
 </head>
 <body>
-  <div class="selector">
-    <label for="asesor">Gestor:</label>
-    <select id="asesor"></select>
+  <h2>Mapa de Rutas de Gestores</h2>
+  <label for="gestorSelect">Gestor:</label>
+  <select id="gestorSelect"></select>
 
-    <label for="fecha">Fecha:</label>
-    <input type="date" id="fecha">
-    <button onclick="filtrar()">Mostrar ruta</button>
-  </div>
+  <label for="fechaInput">Fecha:</label>
+  <input type="date" id="fechaInput">
+
+  <button id="mostrarRuta">Mostrar ruta</button>
 
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    let mapa = L.map('map').setView([21.16, -89.65], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(mapa);
+    const map = L.map("map").setView([19.4326, -99.1332], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
 
-    let datos = [];
-    let capaRuta;
+    let currentRoute = null;
+    let currentMarkers = [];
 
-    // Cargar archivo JSON (tu archivo se llama gestores.json)
+    // 🎨 Colores distintos por gestor
+    const colores = ["blue", "red", "green", "purple", "orange", "brown"];
+    const colorGestor = {};
+
+    // Cargar JSON y llenar select
     fetch("gestores.json")
       .then(res => res.json())
-      .then(json => {
-        datos = json;
-
-        // Poblar lista de asesores únicos
-        let asesores = [...new Set(datos.map(d => d.ASESOR))];
-        let sel = document.getElementById("asesor");
-        asesores.forEach(a => {
+      .then(data => {
+        const gestores = [...new Set(data.map(r => r.ASESOR))];
+        const select = document.getElementById("gestorSelect");
+        gestores.forEach((g, i) => {
+          colorGestor[g] = colores[i % colores.length];
           let opt = document.createElement("option");
-          opt.value = a; opt.textContent = a;
-          sel.appendChild(opt);
+          opt.value = g;
+          opt.textContent = g;
+          select.appendChild(opt);
         });
       });
 
-    function filtrar() {
-      if (capaRuta) {
-        mapa.removeLayer(capaRuta);
-      }
-
-      let asesor = document.getElementById("asesor").value;
-      let fecha = document.getElementById("fecha").value;
-
-      // Filtrar por asesor y FECHA_GESTION (columna 11 en tu Excel)
-      let puntos = datos.filter(d => d.ASESOR === asesor && d.FECHA_GESTION === fecha);
-
-      // Ordenar por HORA (columna 12 en tu Excel)
-      puntos.sort((a, b) => a.HORA.localeCompare(b.HORA));
-
-      let coords = puntos.map(d => [parseFloat(d.LATITUD), parseFloat(d.LONGITUD)]);
-
-      if (coords.length === 0) {
-        alert("No hay registros para este gestor en esa fecha");
-        return;
-      }
-
-      // Dibujar la ruta
-      capaRuta = L.polyline(coords, {color: 'blue'}).addTo(mapa);
-      mapa.fitBounds(capaRuta.getBounds());
-
-      // Agregar marcadores numerados en orden por hora
-      puntos.forEach((d, i) => {
-        let numero = i + 1; // empieza en 1
-        let icono = L.divIcon({
-          className: 'mi-icono',
-          html: `<div style="background:#007bff;color:white;
-                            border-radius:50%;width:25px;height:25px;
-                            display:flex;align-items:center;justify-content:center;
-                            font-size:14px;font-weight:bold;">
-                    ${numero}
-                 </div>`,
-          iconSize: [25, 25]
-        });
-
-        L.marker([d.LATITUD, d.LONGITUD], {icon: icono})
-          .bindPopup(`<b>${numero}. ${d.NOMBRE_COMPLETO || d.NOMBRE}</b><br>
-                      ${d.HORA}<br>
-                      ${d.ACCION}`)
-          .addTo(mapa);
+    // Función para crear icono numerado
+    function crearIcono(numero, color) {
+      return L.divIcon({
+        className: 'mi-icono',
+        html: `<div style="background:${color};color:white;
+                          border-radius:50%;width:25px;height:25px;
+                          display:flex;align-items:center;justify-content:center;
+                          font-size:14px;font-weight:bold;">
+                  ${numero}
+               </div>`,
+        iconSize: [25, 25]
       });
     }
+
+    // Evento click para mostrar ruta
+    document.getElementById("mostrarRuta").addEventListener("click", function () {
+      const gestor = document.getElementById("gestorSelect").value;
+      const fecha = document.getElementById("fechaInput").value;
+
+      // Limpiar rutas y marcadores anteriores
+      if (currentRoute) {
+        map.removeLayer(currentRoute);
+        currentRoute = null;
+      }
+      currentMarkers.forEach(m => map.removeLayer(m));
+      currentMarkers = [];
+
+      fetch("gestores.json")
+        .then(res => res.json())
+        .then(data => {
+          const registros = data
+            .filter(r => r.ASESOR === gestor && r.FECHA_GESTION === fecha)
+            .sort((a, b) => a.HORA.localeCompare(b.HORA));
+
+          if (registros.length === 0) {
+            alert("No hay registros para este gestor en esa fecha");
+            return;
+          }
+
+          const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
+          const color = colorGestor[gestor] || "blue";
+
+          // Dibujar ruta
+          currentRoute = L.polyline(coords, { color }).addTo(map);
+          map.fitBounds(currentRoute.getBounds());
+
+          // Agregar marcadores enumerados
+          registros.forEach((r, i) => {
+            const icono = crearIcono(i + 1, color);
+            const marker = L.marker([r.LATITUD, r.LONGITUD], { icon: icono })
+              .bindPopup(`<b>${i + 1}. ${r.NOMBRE_COMPLETO}</b><br>
+                          Hora: ${r.HORA}<br>
+                          Acción: ${r.ACCION}<br>
+                          Sucursal: ${r.SUCURSAL}`);
+            marker.addTo(map);
+            currentMarkers.push(marker);
+          });
+        });
+    });
   </script>
 </body>
 </html>
