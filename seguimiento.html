@@ -31,7 +31,7 @@
     let datos = [];
     let capaRuta;
 
-    // Cargar archivo JSON
+    // Cargar archivo JSON (tu archivo se llama gestores.json)
     fetch("gestores.json")
       .then(res => res.json())
       .then(json => {
@@ -63,14 +63,31 @@
 
       let coords = puntos.map(d => [parseFloat(d.LATITUD), parseFloat(d.LONGITUD)]);
 
+      if (coords.length === 0) {
+        alert("No hay registros para este gestor en esa fecha");
+        return;
+      }
+
       // Dibujar la ruta
       capaRuta = L.polyline(coords, {color: 'blue'}).addTo(mapa);
       mapa.fitBounds(capaRuta.getBounds());
 
-      // Agregar marcadores
-      puntos.forEach(d => {
-        L.marker([d.LATITUD, d.LONGITUD])
-          .bindPopup(`<b>${d.NOMBRE_COMPLETO}</b><br>${d.HORA}<br>${d.ACCION}`)
+      // Agregar marcadores numerados
+      puntos.forEach((d, i) => {
+        let numero = i + 1; // empieza en 1
+        let icono = L.divIcon({
+          className: 'mi-icono',
+          html: `<div style="background:#007bff;color:white;
+                            border-radius:50%;width:25px;height:25px;
+                            display:flex;align-items:center;justify-content:center;
+                            font-size:14px;font-weight:bold;">
+                    ${numero}
+                 </div>`,
+          iconSize: [25, 25]
+        });
+
+        L.marker([d.LATITUD, d.LONGITUD], {icon: icono})
+          .bindPopup(`<b>${numero}. ${d.NOMBRE_COMPLETO}</b><br>${d.HORA}<br>${d.ACCION}`)
           .addTo(mapa);
       });
     }
