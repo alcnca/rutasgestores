@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Rutas de Gestores</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    #map { height: 100vh; }
+    .selector { margin: 10px; }
+  </style>
+</head>
+<body>
+  <div class="selector">
+    <label for="asesor">Gestor:</label>
+    <select id="asesor"></select>
+
+    <label for="fecha">Fecha:</label>
+    <input type="date" id="fecha">
+    <button onclick="filtrar()">Mostrar ruta</button>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let mapa = L.map('map').setView([21.16, -89.65], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(mapa);
+
+    let datos = [];
+    let capaRuta;
+
+    // Cargar archivo JSON
+    fetch("gestores.json")
+      .then(res => res.json())
+      .then(json => {
+        datos = json;
+
+        // Poblar lista de asesores únicos
+        let asesores = [...new Set(datos.map(d => d.ASESOR))];
+        let sel = document.getElementById("asesor");
+        asesores.forEach(a => {
+          let opt = document.createElement("option");
+          opt.value = a; opt.textContent = a;
+          sel.appendChild(opt);
+        });
+      });
+
+    function filtrar() {
+      if (capaRuta) {
+        mapa.removeLayer(capaRuta);
+      }
+
+      let asesor = document.getElementById("asesor").value;
+      let fecha = document.getElementById("fecha").value;
+
+      // Filtrar por asesor y fecha
+      let puntos = datos.filter(d => d.ASESOR === asesor && d.FECHA === fecha);
+
+      // Ordenar por hora
+      puntos.sort((a, b) => a.HORA.localeCompare(b.HORA));
+
+      let coords = puntos.map(d => [parseFloat(d.LATITUD), parseFloat(d.LONGITUD)]);
+
+      // Dibujar la ruta
+      capaRuta = L.polyline(coords, {color: 'blue'}).addTo(mapa);
+      mapa.fitBounds(capaRuta.getBounds());
+
+      // Agregar marcadores
+      puntos.forEach(d => {
+        L.marker([d.LATITUD, d.LONGITUD])
+          .bindPopup(`<b>${d.NOMBRE_COMPLETO}</b><br>${d.HORA}<br>${d.ACCION}`)
+          .addTo(mapa);
+      });
+    }
+  </script>
+</body>
+</html>
