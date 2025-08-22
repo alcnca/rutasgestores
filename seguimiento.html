@@ -55,10 +55,10 @@
       let asesor = document.getElementById("asesor").value;
       let fecha = document.getElementById("fecha").value;
 
-      // Filtrar por asesor y fecha
-      let puntos = datos.filter(d => d.ASESOR === asesor && d.FECHA === fecha);
+      // Filtrar por asesor y FECHA_GESTION (columna 11 en tu Excel)
+      let puntos = datos.filter(d => d.ASESOR === asesor && d.FECHA_GESTION === fecha);
 
-      // Ordenar por hora
+      // Ordenar por HORA (columna 12 en tu Excel)
       puntos.sort((a, b) => a.HORA.localeCompare(b.HORA));
 
       let coords = puntos.map(d => [parseFloat(d.LATITUD), parseFloat(d.LONGITUD)]);
@@ -72,7 +72,7 @@
       capaRuta = L.polyline(coords, {color: 'blue'}).addTo(mapa);
       mapa.fitBounds(capaRuta.getBounds());
 
-      // Agregar marcadores numerados
+      // Agregar marcadores numerados en orden por hora
       puntos.forEach((d, i) => {
         let numero = i + 1; // empieza en 1
         let icono = L.divIcon({
@@ -87,7 +87,9 @@
         });
 
         L.marker([d.LATITUD, d.LONGITUD], {icon: icono})
-          .bindPopup(`<b>${numero}. ${d.NOMBRE_COMPLETO}</b><br>${d.HORA}<br>${d.ACCION}`)
+          .bindPopup(`<b>${numero}. ${d.NOMBRE_COMPLETO || d.NOMBRE}</b><br>
+                      ${d.HORA}<br>
+                      ${d.ACCION}`)
           .addTo(mapa);
       });
     }
