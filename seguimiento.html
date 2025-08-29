@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Rutas de Gestores</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <style>
     #map { height: 85vh; width: 100%; margin-top: 10px; }
     .filtros { margin-bottom: 8px; }
@@ -22,7 +23,7 @@
     <select id="gestorSelect"></select>
 
     <label for="fechaInput">Fecha:</label>
-    <input type="date" id="fechaInput">
+    <input type="text" id="fechaInput" placeholder="Selecciona una fecha">
     
     <div id="ultima-actualizacion"></div>
   </div>
@@ -30,6 +31,7 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script>
     const map = L.map("map", { zoomControl: false }).setView([19.4326, -99.1332], 12);
     L.control.zoom({ position: "bottomright" }).addTo(map);
@@ -41,12 +43,12 @@
     let allData = [];
     let currentRoute = null;
     let currentMarkers = [];
+    let calendario;
 
-    // 🎨 Colores por gestor
     const colores = ["blue", "red", "green", "purple", "orange", "brown"];
     const colorGestor = {};
 
-    // 📌 Cargar datos y cabecera Last-Modified
+    // 📌 Cargar datos
     fetch("gestores.json").then(res => {
       const lastModified = res.headers.get("Last-Modified");
       if (lastModified) {
@@ -72,10 +74,16 @@
         sucursalSelect.appendChild(opt);
       });
 
-      // eventos en cascada
       sucursalSelect.addEventListener("change", actualizarGestores);
       document.getElementById("gestorSelect").addEventListener("change", actualizarFechas);
-      document.getElementById("fechaInput").addEventListener("change", actualizarMapa);
+
+      calendario = flatpickr("#fechaInput", {
+        dateFormat: "Y-m-d",
+        disable: [],   // se llenará dinámicamente
+        onChange: function(selectedDates, dateStr) {
+          if (dateStr) actualizarMapa(dateStr);
+        }
+      });
     }
 
     function actualizarGestores() {
@@ -101,29 +109,15 @@
     function actualizarFechas() {
       const sucursal = document.getElementById("sucursalSelect").value;
       const gestor = document.getElementById("gestorSelect").value;
-      const fechaInput = document.getElementById("fechaInput");
-      fechaInput.value = "";
-
       if (!sucursal || !gestor) return;
 
-      const fechas = [...new Set(allData
+      const fechasDisponibles = [...new Set(allData
         .filter(r => r.SUCURSAL === sucursal && r.ASESOR === gestor)
         .map(r => r.FECHA_GESTION))].sort();
 
-      if (fechas.length > 0) {
-        fechaInput.min = fechas[0];
-        fechaInput.max = fechas[fechas.length - 1];
-        fechaInput.setAttribute("list", "fechasDisponibles");
-
-        // bloquear manualmente (solo permitir fechas de la lista)
-        fechaInput.oninput = function() {
-          if (!fechas.includes(this.value)) {
-            this.value = "";
-          } else {
-            actualizarMapa();
-          }
-        };
-      }
+      // Bloquear todas las fechas excepto estas
+      calendario.set("enable", fechasDisponibles);
+      calendario.clear();
     }
 
     function crearIcono(numero, color) {
@@ -139,14 +133,11 @@
       });
     }
 
-    function actualizarMapa() {
+    function actualizarMapa(fecha) {
       const sucursal = document.getElementById("sucursalSelect").value;
       const gestor = document.getElementById("gestorSelect").value;
-      const fecha = document.getElementById("fechaInput").value;
-
       if (!sucursal || !gestor || !fecha) return;
 
-      // limpiar mapa
       if (currentRoute) { map.removeLayer(currentRoute); currentRoute = null; }
       currentMarkers.forEach(m => map.removeLayer(m));
       currentMarkers = [];
@@ -155,10 +146,7 @@
         .filter(r => r.SUCURSAL === sucursal && r.ASESOR === gestor && r.FECHA_GESTION === fecha)
         .sort((a, b) => a.HORA.localeCompare(b.HORA));
 
-      if (registros.length === 0) {
-        alert("No hay registros");
-        return;
-      }
+      if (registros.length === 0) return;
 
       const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
       const color = colorGestor[gestor] || "blue";
