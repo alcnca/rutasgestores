@@ -6,23 +6,41 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
   <style>
     #map { height: 90vh; width: 100%; }
+    .info-panel {
+      margin: 10px 0;
+      font-size: 14px;
+      color: #333;
+    }
   </style>
 </head>
 <body>
   <h2>Mapa de Rutas de Gestores</h2>
+
   <label for="gestorSelect">Gestor:</label>
   <select id="gestorSelect"></select>
+
+  <label for="sucursalSelect">Sucursal:</label>
+  <select id="sucursalSelect">
+    <option value="TODAS">Todas</option>
+  </select>
 
   <label for="fechaInput">Fecha:</label>
   <input type="date" id="fechaInput">
 
   <button id="mostrarRuta">Mostrar ruta</button>
 
+  <div class="info-panel">
+    <span id="ultima-actualizacion"></span>
+  </div>
+
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const map = L.map("map").setView([19.4326, -99.1332], 12);
+    // Mapa con controles de zoom en la esquina inferior derecha
+    const map = L.map("map", { zoomControl: false }).setView([19.4326, -99.1332], 12);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap contributors"
     }).addTo(map);
@@ -34,18 +52,47 @@
     const colores = ["blue", "red", "green", "purple", "orange", "brown"];
     const colorGestor = {};
 
-    // Cargar JSON y llenar select
+    let dataGlobal = [];
+
+    // Cargar JSON y llenar selects
     fetch("gestores.json")
-      .then(res => res.json())
+      .then(res => {
+        // 🔹 Mostrar fecha de última modificación
+        const lastModified = res.headers.get("Last-Modified");
+        if (lastModified) {
+          const fecha = new Date(lastModified);
+          const fechaFormateada = fecha.toLocaleDateString("es-MX", {
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+          });
+          document.getElementById("ultima-actualizacion").textContent =
+            "Última actualización: " + fechaFormateada;
+        }
+        return res.json();
+      })
       .then(data => {
+        dataGlobal = data;
+
+        // Llenar gestores
         const gestores = [...new Set(data.map(r => r.ASESOR))];
-        const select = document.getElementById("gestorSelect");
+        const selectGestor = document.getElementById("gestorSelect");
         gestores.forEach((g, i) => {
           colorGestor[g] = colores[i % colores.length];
           let opt = document.createElement("option");
           opt.value = g;
           opt.textContent = g;
-          select.appendChild(opt);
+          selectGestor.appendChild(opt);
+        });
+
+        // Llenar sucursales
+        const sucursales = [...new Set(data.map(r => r.SUCURSAL))];
+        const selectSuc = document.getElementById("sucursalSelect");
+        sucursales.forEach(s => {
+          let opt = document.createElement("option");
+          opt.value = s;
+          opt.textContent = s;
+          selectSuc.appendChild(opt);
         });
       });
 
@@ -66,6 +113,7 @@
     // Evento click para mostrar ruta
     document.getElementById("mostrarRuta").addEventListener("click", function () {
       const gestor = document.getElementById("gestorSelect").value;
+      const sucursal = document.getElementById("sucursalSelect").value;
       const fecha = document.getElementById("fechaInput").value;
 
       // Limpiar rutas y marcadores anteriores
@@ -76,37 +124,37 @@
       currentMarkers.forEach(m => map.removeLayer(m));
       currentMarkers = [];
 
-      fetch("gestores.json")
-        .then(res => res.json())
-        .then(data => {
-          const registros = data
-            .filter(r => r.ASESOR === gestor && r.FECHA_GESTION === fecha)
-            .sort((a, b) => a.HORA.localeCompare(b.HORA));
+      const registros = dataGlobal
+        .filter(r =>
+          r.ASESOR === gestor &&
+          r.FECHA_GESTION === fecha &&
+          (sucursal === "TODAS" || r.SUCURSAL === sucursal)
+        )
+        .sort((a, b) => a.HORA.localeCompare(b.HORA));
 
-          if (registros.length === 0) {
-            alert("No hay registros para este gestor en esa fecha");
-            return;
-          }
+      if (registros.length === 0) {
+        alert("No hay registros para este gestor en esa fecha/sucursal");
+        return;
+      }
 
-          const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
-          const color = colorGestor[gestor] || "blue";
+      const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
+      const color = colorGestor[gestor] || "blue";
 
-          // Dibujar ruta
-          currentRoute = L.polyline(coords, { color }).addTo(map);
-          map.fitBounds(currentRoute.getBounds());
+      // Dibujar ruta
+      currentRoute = L.polyline(coords, { color }).addTo(map);
+      map.fitBounds(currentRoute.getBounds());
 
-          // Agregar marcadores enumerados
-          registros.forEach((r, i) => {
-            const icono = crearIcono(i + 1, color);
-            const marker = L.marker([r.LATITUD, r.LONGITUD], { icon: icono })
-              .bindPopup(`<b>${i + 1}. ${r.NOMBRE_COMPLETO}</b><br>
-                          Hora: ${r.HORA}<br>
-                          Acción: ${r.ACCION}<br>
-                          Sucursal: ${r.SUCURSAL}`);
-            marker.addTo(map);
-            currentMarkers.push(marker);
-          });
-        });
+      // Agregar marcadores enumerados
+      registros.forEach((r, i) => {
+        const icono = crearIcono(i + 1, color);
+        const marker = L.marker([r.LATITUD, r.LONGITUD], { icon: icono })
+          .bindPopup(`<b>${i + 1}. ${r.NOMBRE_COMPLETO}</b><br>
+                      Hora: ${r.HORA}<br>
+                      Acción: ${r.ACCION}<br>
+                      Sucursal: ${r.SUCURSAL}`);
+        marker.addTo(map);
+        currentMarkers.push(marker);
+      });
     });
   </script>
 </body>
