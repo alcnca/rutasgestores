@@ -5,39 +5,32 @@
   <title>Rutas de Gestores</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
   <style>
-    #map { height: 90vh; width: 100%; }
-    .info-panel {
-      margin: 10px 0;
-      font-size: 14px;
-      color: #333;
-    }
+    #map { height: 85vh; width: 100%; margin-top: 10px; }
+    .filtros { margin-bottom: 8px; }
+    .filtros label { margin-right: 15px; }
+    #ultima-actualizacion { font-size: 12px; color: #333; margin-top: 5px; }
   </style>
 </head>
 <body>
   <h2>Mapa de Rutas de Gestores</h2>
 
-  <label for="gestorSelect">Gestor:</label>
-  <select id="gestorSelect"></select>
+  <div class="filtros">
+    <label for="sucursalSelect">Sucursal:</label>
+    <select id="sucursalSelect"></select>
 
-  <label for="sucursalSelect">Sucursal:</label>
-  <select id="sucursalSelect">
-    <option value="TODAS">Todas</option>
-  </select>
+    <label for="gestorSelect">Gestor:</label>
+    <select id="gestorSelect"></select>
 
-  <label for="fechaInput">Fecha:</label>
-  <input type="date" id="fechaInput">
-
-  <button id="mostrarRuta">Mostrar ruta</button>
-
-  <div class="info-panel">
-    <span id="ultima-actualizacion"></span>
+    <label for="fechaInput">Fecha:</label>
+    <input type="date" id="fechaInput">
+    
+    <div id="ultima-actualizacion"></div>
   </div>
 
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    // Mapa con controles de zoom en la esquina inferior derecha
     const map = L.map("map", { zoomControl: false }).setView([19.4326, -99.1332], 12);
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
@@ -45,58 +38,94 @@
       attribution: "© OpenStreetMap contributors"
     }).addTo(map);
 
+    let allData = [];
     let currentRoute = null;
     let currentMarkers = [];
 
-    // 🎨 Colores distintos por gestor
+    // 🎨 Colores por gestor
     const colores = ["blue", "red", "green", "purple", "orange", "brown"];
     const colorGestor = {};
 
-    let dataGlobal = [];
+    // 📌 Cargar datos y cabecera Last-Modified
+    fetch("gestores.json").then(res => {
+      const lastModified = res.headers.get("Last-Modified");
+      if (lastModified) {
+        const fecha = new Date(lastModified);
+        document.getElementById("ultima-actualizacion").innerText =
+          "Última actualización: " + fecha.toLocaleDateString("es-ES",
+            { day: "numeric", month: "long", year: "numeric" });
+      }
+      return res.json();
+    }).then(data => {
+      allData = data;
+      initFiltros();
+    });
 
-    // Cargar JSON y llenar selects
-    fetch("gestores.json")
-      .then(res => {
-        // 🔹 Mostrar fecha de última modificación
-        const lastModified = res.headers.get("Last-Modified");
-        if (lastModified) {
-          const fecha = new Date(lastModified);
-          const fechaFormateada = fecha.toLocaleDateString("es-MX", {
-            day: "numeric",
-            month: "long",
-            year: "numeric"
-          });
-          document.getElementById("ultima-actualizacion").textContent =
-            "Última actualización: " + fechaFormateada;
-        }
-        return res.json();
-      })
-      .then(data => {
-        dataGlobal = data;
-
-        // Llenar gestores
-        const gestores = [...new Set(data.map(r => r.ASESOR))];
-        const selectGestor = document.getElementById("gestorSelect");
-        gestores.forEach((g, i) => {
-          colorGestor[g] = colores[i % colores.length];
-          let opt = document.createElement("option");
-          opt.value = g;
-          opt.textContent = g;
-          selectGestor.appendChild(opt);
-        });
-
-        // Llenar sucursales
-        const sucursales = [...new Set(data.map(r => r.SUCURSAL))];
-        const selectSuc = document.getElementById("sucursalSelect");
-        sucursales.forEach(s => {
-          let opt = document.createElement("option");
-          opt.value = s;
-          opt.textContent = s;
-          selectSuc.appendChild(opt);
-        });
+    function initFiltros() {
+      const sucursales = [...new Set(allData.map(r => r.SUCURSAL))].sort();
+      const sucursalSelect = document.getElementById("sucursalSelect");
+      sucursalSelect.innerHTML = `<option value="">-- Selecciona --</option>`;
+      sucursales.forEach(s => {
+        let opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        sucursalSelect.appendChild(opt);
       });
 
-    // Función para crear icono numerado
+      // eventos en cascada
+      sucursalSelect.addEventListener("change", actualizarGestores);
+      document.getElementById("gestorSelect").addEventListener("change", actualizarFechas);
+      document.getElementById("fechaInput").addEventListener("change", actualizarMapa);
+    }
+
+    function actualizarGestores() {
+      const sucursal = document.getElementById("sucursalSelect").value;
+      const gestorSelect = document.getElementById("gestorSelect");
+      gestorSelect.innerHTML = `<option value="">-- Selecciona --</option>`;
+      
+      if (!sucursal) return;
+
+      const gestores = [...new Set(allData
+        .filter(r => r.SUCURSAL === sucursal)
+        .map(r => r.ASESOR))].sort();
+
+      gestores.forEach((g, i) => {
+        colorGestor[g] = colores[i % colores.length];
+        let opt = document.createElement("option");
+        opt.value = g;
+        opt.textContent = g;
+        gestorSelect.appendChild(opt);
+      });
+    }
+
+    function actualizarFechas() {
+      const sucursal = document.getElementById("sucursalSelect").value;
+      const gestor = document.getElementById("gestorSelect").value;
+      const fechaInput = document.getElementById("fechaInput");
+      fechaInput.value = "";
+
+      if (!sucursal || !gestor) return;
+
+      const fechas = [...new Set(allData
+        .filter(r => r.SUCURSAL === sucursal && r.ASESOR === gestor)
+        .map(r => r.FECHA_GESTION))].sort();
+
+      if (fechas.length > 0) {
+        fechaInput.min = fechas[0];
+        fechaInput.max = fechas[fechas.length - 1];
+        fechaInput.setAttribute("list", "fechasDisponibles");
+
+        // bloquear manualmente (solo permitir fechas de la lista)
+        fechaInput.oninput = function() {
+          if (!fechas.includes(this.value)) {
+            this.value = "";
+          } else {
+            actualizarMapa();
+          }
+        };
+      }
+    }
+
     function crearIcono(numero, color) {
       return L.divIcon({
         className: 'mi-icono',
@@ -110,41 +139,33 @@
       });
     }
 
-    // Evento click para mostrar ruta
-    document.getElementById("mostrarRuta").addEventListener("click", function () {
-      const gestor = document.getElementById("gestorSelect").value;
+    function actualizarMapa() {
       const sucursal = document.getElementById("sucursalSelect").value;
+      const gestor = document.getElementById("gestorSelect").value;
       const fecha = document.getElementById("fechaInput").value;
 
-      // Limpiar rutas y marcadores anteriores
-      if (currentRoute) {
-        map.removeLayer(currentRoute);
-        currentRoute = null;
-      }
+      if (!sucursal || !gestor || !fecha) return;
+
+      // limpiar mapa
+      if (currentRoute) { map.removeLayer(currentRoute); currentRoute = null; }
       currentMarkers.forEach(m => map.removeLayer(m));
       currentMarkers = [];
 
-      const registros = dataGlobal
-        .filter(r =>
-          r.ASESOR === gestor &&
-          r.FECHA_GESTION === fecha &&
-          (sucursal === "TODAS" || r.SUCURSAL === sucursal)
-        )
+      const registros = allData
+        .filter(r => r.SUCURSAL === sucursal && r.ASESOR === gestor && r.FECHA_GESTION === fecha)
         .sort((a, b) => a.HORA.localeCompare(b.HORA));
 
       if (registros.length === 0) {
-        alert("No hay registros para este gestor en esa fecha/sucursal");
+        alert("No hay registros");
         return;
       }
 
       const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
       const color = colorGestor[gestor] || "blue";
 
-      // Dibujar ruta
       currentRoute = L.polyline(coords, { color }).addTo(map);
       map.fitBounds(currentRoute.getBounds());
 
-      // Agregar marcadores enumerados
       registros.forEach((r, i) => {
         const icono = crearIcono(i + 1, color);
         const marker = L.marker([r.LATITUD, r.LONGITUD], { icon: icono })
@@ -155,7 +176,7 @@
         marker.addTo(map);
         currentMarkers.push(marker);
       });
-    });
+    }
   </script>
 </body>
 </html>
