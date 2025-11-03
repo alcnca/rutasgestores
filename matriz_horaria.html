@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matriz Horaria — Vacíos por usuario y sucursal</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    :root{
+      --grid-border:#dee2e6;
+      --dot:#0d6efd;
+      --empty:#ffe3e3;     /* rojo tenue: vacío en horario */
+      --empty-green:#e9fbe7;/* verde tenue: vacío sugerido (más cercano a 14:00) */
+      --off:#f1f3f5;       /* fuera de horario */
+    }
+    body{background:#fff}
+    .sticky-top-2{position:sticky;top:0;z-index:1000;background:#fff;border-bottom:1px solid var(--grid-border)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .smallnote{font-size:.9rem;color:#6c757d}
+    .table-grid th,.table-grid td{border:1px solid var(--grid-border);text-align:center;vertical-align:middle}
+    .table-grid thead th{position:sticky;top:0;background:#fff;z-index:2}
+    .nowrap{white-space:nowrap}
+    .w-hour{min-width:3rem}
+    .cell-dot{width:1.75rem;height:1.75rem;display:inline-flex;align-items:center;justify-content:center;margin:auto}
+    .cell-dot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--dot);display:inline-block}
+    .cell-empty::after{display:none}
+    .cell-empty-wk{background:var(--empty)}
+    .cell-empty-green{background:var(--empty-green)!important;border-color:#b7f0c1!important}
+    .cell-off{background:var(--off);color:#adb5bd}
+    .badge-spot{background:#e7f1ff;color:#0d6efd;border:1px solid #b6d4fe}
+    .scroll-x{overflow-x:auto}
+  </style>
+</head>
+<body>
+  <header class="sticky-top-2">
+    <div class="container py-3">
+      <h1 class="h4 mb-1">Matriz Horaria de Gestiones</h1>
+      <p class="smallnote mb-0">
+        Filas = <strong>Usuario (Gestor/Asesor) + Fecha</strong> · Columnas =
+        <strong>Horas 09:00–18:00</strong> (L–V) y <strong>09:00–14:00</strong> (Sáb).
+        Punto = hubo ≥1 gestión. Rojo = hora vacía (en horario), Verde = vacío más cercano a 14:00 (L–V).
+      </p>
+    </div>
+  </header>
+
+  <main class="container py-3">
+    <!-- CONTROLES -->
+    <section class="card mb-3">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Rol</label>
+            <select id="roleSelect" class="form-select">
+              <option value="asesor" selected>Asesor</option>
+              <option value="gestor">Gestor</option>
+            </select>
+            <div class="smallnote">Detecta GESTOR/COORDINADOR/SUPERVISOR si existen</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Usuario</label>
+            <select id="userSelect" class="form-select"><option value="">(Selecciona)</option></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Sucursal</label>
+            <select id="fltSucursal" class="form-select"><option value="">(Todas)</option></select>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+          <div class="col-md-4">
+            <label class="form-label">Fecha desde</label>
+            <input id="fltDesde" type="date" class="form-control" />
+            <div class="smallnote">Por defecto: primer día del mes</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Fecha hasta</label>
+            <input id="fltHasta" type="date" class="form-control" />
+            <div class="smallnote">Por defecto: hoy</div>
+          </div>
+          <div class="col-md-4 d-grid align-items-end">
+            <label class="form-label">&nbsp;</label>
+            <button id="btnRender" class="btn btn-success">Generar matriz</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MATRIZ + META -->
+    <section class="mb-3">
+      <div id="metaBar" class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <span class="badge rounded-pill text-bg-secondary" id="badgeRows">0 filas</span>
+          <span class="badge rounded-pill text-bg-secondary ms-1" id="badgeGroups">0 combinaciones (usuario+fecha)</span>
+        </div>
+        <div class="smallnote">Click en encabezado de hora para resaltar la columna</div>
+      </div>
+      <div class="scroll-x">
+        <table id="grid" class="table table-grid table-sm">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Vacíos y Lugares repetidos -->
+    <section class="row g-3">
+      <div class="col-lg-7">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h6 mb-3">Vacíos por usuario y fecha</h2>
+            <div class="scroll-x">
+              <table id="tblGaps" class="table table-sm table-striped">
+                <thead><tr><th>USUARIO</th><th>FECHA</th><th>Vacíos (conteo)</th><th>Horas vacías</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="smallnote mb-0">*En este reporte se excluye 18:00 del conteo/listado.</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h6 mb-3">Lugares repetidos por usuario (lat,lon redondeadas)</h2>
+            <div class="scroll-x">
+              <table id="tblSpots" class="table table-sm table-striped">
+                <thead><tr><th>USUARIO</th><th>LAT_RED</th><th>LON_RED</th><th>Gestiones</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="smallnote">Se usa SUCURSAL/ASESOR/GESTOR según filtros.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // URL fija del JSON (carga automática al iniciar)
+    const JSON_URL = "https://raw.githubusercontent.com/alcnca/rutasgestores/refs/heads/main/gestores.json";
+
+    // Configuración de horas mostradas (columnas)
+    const HOUR_START = 9;    // 09:00
+    const HOUR_END   = 18;   // 18:00
+    const HOURS = Array.from({length: HOUR_END - HOUR_START + 1}, (_, i) => HOUR_START + i);
+
+    // Utilidades
+    function uniq(arr){ return Array.from(new Set(arr)); }
+    function by(a,b){ return a.localeCompare(b,'es'); }
+    function pad2(n){ return String(n).padStart(2,'0'); }
+    function hourLabel(h){ return `${pad2(h)}:00`; }
+
+    function normalizeHourStr(s){
+      if(!s) return '';
+      return s.replace(/\s+/g,' ')
+              .replace('a. m.','AM').replace('p. m.','PM')
+              .replace('a. m','AM').replace('p. m','PM')
+              .trim();
+    }
+    function parseTimeToHourBase(str){
+      if(!str) return null;
+      const s = normalizeHourStr(str).toUpperCase();
+      const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/);
+      if(!m) return null;
+      let hh = parseInt(m[1],10);
+      const ap = m[4]||null;
+      if(ap){
+        if(ap==='AM'){ if(hh===12) hh = 0; }
+        else{ if(hh!==12) hh += 12; }
+      }
+      if(hh<0||hh>23) return null;
+      return hh;
+    }
+    function toISODate(dstr){
+      if(!dstr) return '';
+      if(/^\d{4}-\d{2}-\d{2}$/.test(dstr)) return dstr;
+      const m = dstr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if(m) return `${m[3]}-${m[2]}-${m[1]}`;
+      const d = new Date(dstr);
+      if(Number.isNaN(d.getTime())) return '';
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    function roundCoord(v,dec){ const p=Math.pow(10,dec); return Math.round(Number(v)*p)/p; }
+    function dowOfISO(iso){ const d=new Date(iso+'T00:00:00'); return d.getDay(); }
+    function workHoursForDate(iso){
+      const dow = dowOfISO(iso);
+      const set = new Set();
+      if(dow>=1 && dow<=5){ for(let h=HOUR_START; h<=HOUR_END; h++) set.add(h); } // L–V 9–18
+      else if(dow===6){ for(let h=9; h<=14; h++) set.add(h); }                    // Sábado 9–14
+      return set; // Domingo sin horario
+    }
+    function isOffHour(iso, h){ return !workHoursForDate(iso).has(h); }
+
+    // Estado
+    let rawRows = [];
+    let roleField = 'ASESOR';
+    const gestorFieldCandidates = ['GESTOR','COORDINADOR','SUPERVISOR','JEFE','LIDER'];
+
+    // Datos helpers
+    function pickRoleField(role){
+      if(role === 'asesor') return 'ASESOR';
+      for(const k of gestorFieldCandidates){ if(rawRows.some(r => r[k] != null)) return k; }
+      return 'ASESOR'; // fallback
+    }
+    function usersForRole(field){
+      return uniq(rawRows.map(r => (r[field]||'').toString().trim()).filter(Boolean)).sort(by);
+    }
+    function sucursalesForUser(field, user){
+      const sucs = rawRows.filter(r => (r[field]||'').toString().trim() === user)
+                          .map(r => (r['SUCURSAL']||'').toString().trim())
+                          .filter(Boolean);
+      return uniq(sucs).sort(by);
+    }
+    function setDefaultDates(){
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth()+1).padStart(2,'0');
+      const dd = String(today.getDate()).padStart(2,'0');
+      document.getElementById('fltDesde').value = `${yyyy}-${mm}-01`;
+      document.getElementById('fltHasta').value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    // Render principal
+    function buildMatrix(){
+      const role = document.getElementById('roleSelect').value;
+      const user = document.getElementById('userSelect').value;
+      const suc  = document.getElementById('fltSucursal').value;
+      const desde = document.getElementById('fltDesde').value;
+      const hasta = document.getElementById('fltHasta').value;
+      const dec = 5;
+
+      roleField = pickRoleField(role);
+
+      const pre = rawRows.map(r=>{
+        const horaSrc = (r['HORA2'] && r['HORA2'].toString().trim()!=='') ? r['HORA2'] : r['HORA'];
+        const hourBase = parseTimeToHourBase(horaSrc);
+        const fechaISO = toISODate(r['FECHA_GESTION'] || r['FECHA'] || '');
+        const latr = roundCoord(r['LATITUD'], dec);
+        const lonr = roundCoord(r['LONGITUD'], dec);
+        return {
+          ...r,
+          _usuario: (r[roleField]||'').toString().trim(),
+          _fecha: fechaISO,
+          _hourBase: hourBase,
+          _lat_r: latr,
+          _lon_r: lonr,
+          _spotKey: `${(r[roleField]||'').toString().trim()}|${latr},${lonr}`
+        };
+      }).filter(r=> r._fecha && r._usuario);
+
+      const rowsF = pre.filter(r=>
+        (!user || r._usuario === user) &&
+        (!suc || (r['SUCURSAL']||'').toString().trim() === suc) &&
+        (!desde || r._fecha>=desde) &&
+        (!hasta || r._fecha<=hasta)
+      );
+
+      document.getElementById('badgeRows').textContent = `${rowsF.length} filas`;
+
+      // Agrupar por (usuario, fecha)
+      const key = r=>`${r._usuario}|${r._fecha}`;
+      const map = new Map();
+      for(const r of rowsF){
+        if(r._hourBase==null) continue;
+        const k = key(r);
+        if(!map.has(k)) map.set(k, {usuario:r._usuario, fecha:r._fecha, hours:new Set(), rows:[]});
+        const obj = map.get(k);
+        obj.hours.add(r._hourBase);
+        obj.rows.push(r);
+      }
+      const groups = Array.from(map.values()).sort((a,b)=> by(a.usuario,b.usuario) || by(a.fecha,b.fecha));
+      document.getElementById('badgeGroups').textContent = `${groups.length} combinaciones (usuario+fecha)`;
+
+      // Conteo de "mismo lugar"
+      const spotCount = new Map();
+      for(const r of rowsF){
+        const k = r._spotKey;
+        spotCount.set(k, (spotCount.get(k)||0)+1);
+      }
+
+      // Render header
+      const thead = document.querySelector('#grid thead');
+      const tbody = document.querySelector('#grid tbody');
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      const trh = document.createElement('tr');
+      ['USUARIO','FECHA','SPOTS'].forEach(h=>{
+        const th=document.createElement('th'); th.textContent=h; trh.appendChild(th);
+      });
+      for(const h of HOURS){
+        const th=document.createElement('th');
+        th.className='w-hour nowrap';
+        th.textContent = `${pad2(h)}:00`;
+        th.dataset.hour=h;
+        th.style.cursor='pointer';
+        trh.appendChild(th);
+      }
+      thead.appendChild(trh);
+
+      // Body + vacíos/off (con rojo y verde)
+      const gapsRows = [];
+      for(const g of groups){
+        const tr = document.createElement('tr');
+        const tdU = document.createElement('td'); tdU.textContent = g.usuario; tr.appendChild(tdU);
+        const tdF = document.createElement('td'); tdF.textContent = g.fecha; tr.appendChild(tdF);
+        const uniqSpots = uniq(g.rows.map(r=>`${r._lat_r},${r._lon_r}`));
+        const repeated = uniqSpots.filter(s=> spotCount.get(`${g.usuario}|${s}`)>1);
+        const tdS = document.createElement('td');
+        tdS.innerHTML = `<span class="badge rounded-pill badge-spot">${repeated.length} repetidos</span>`;
+        tr.appendChild(tdS);
+
+        // Conjunto de horas laborales del día
+        const wkSet = workHoursForDate(g.fecha);
+
+        // 1) Lista de horas vacías (solo en horario laboral)
+        const empties = HOURS.filter(h => wkSet.has(h) && !g.hours.has(h));
+
+        // 2) Elegir la hora vacía más cercana a 14:00 (solo L–V). En empate, la anterior.
+        let greenHour = null;
+        const dow = dowOfISO(g.fecha);
+        if (dow >= 1 && dow <= 5 && empties.length) {
+          greenHour = empties.reduce((best, h) => {
+            if (best === null) return h;
+            const da = Math.abs(h - 14);
+            const db = Math.abs(best - 14);
+            if (da < db) return h;
+            if (da > db) return best;
+            return (h < best) ? h : best; // empate -> hora más temprana
+          }, null);
+        }
+
+        // 3) Render de celdas con colores
+        for(const h of HOURS){
+          const td = document.createElement('td'); td.className='w-hour';
+          const has = g.hours.has(h);
+          const off = !wkSet.has(h);   // fuera de horario para esa fecha
+
+          if(off){
+            td.classList.add('cell-off');
+            td.textContent = '—';
+          }else if(has){
+            td.innerHTML = `<span class="cell-dot"></span>`;
+          }else{
+            // vacío en horario: rojo por defecto, verde si es la sugerida
+            if(h === greenHour){
+              td.classList.add('cell-empty-green');
+            }else{
+              td.classList.add('cell-empty-wk');
+            }
+            td.innerHTML = `<span class="cell-dot cell-empty"></span>`;
+          }
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+
+        // 4) Registrar vacíos para el reporte (excluyendo 18:00 SOLO en el reporte)
+        const emptiesReport = empties.filter(h => h !== 18);
+        gapsRows.push({
+          usuario: g.usuario,
+          fecha: g.fecha,
+          count: emptiesReport.length,
+          list: emptiesReport.map(hourLabel).join(', ')
+        });
+      }
+
+      // Resaltar columna por click
+      thead.querySelectorAll('th[data-hour]').forEach(th=>{
+        th.addEventListener('click', ()=>{
+          const hour = Number(th.dataset.hour);
+          const offset = (hour - HOUR_START) + 3; // 3 columnas fijas
+          tbody.querySelectorAll('tr').forEach(tr=>{
+            tr.querySelectorAll('td').forEach((td,idx)=>{
+              td.style.backgroundColor = '';
+              if(idx===offset){ td.style.backgroundColor = '#fff3cd'; }
+            });
+          });
+        });
+      });
+
+      // Tabla de Vacíos
+      const gapsTbody = document.querySelector('#tblGaps tbody');
+      gapsTbody.innerHTML = '';
+      for(const g of gapsRows.sort((a,b)=> by(a.usuario,b.usuario) || by(a.fecha,b.fecha))){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${g.usuario}</td><td>${g.fecha}</td><td>${g.count}</td><td class="mono">${g.list}</td>`;
+        gapsTbody.appendChild(tr);
+      }
+
+      // Tabla de spots
+      const tblSpots = document.querySelector('#tblSpots tbody');
+      tblSpots.innerHTML='';
+      const byUsuario = new Map();
+      for(const [k,cnt] of (function*(){
+        for(const [kk,vv] of new Map(Array.from((function(map){const m=new Map(); for(const r of rowsF){const k=r._spotKey; m.set(k,(m.get(k)||0)+1);} return m;})(null)).entries())){yield [kk,vv];}
+      })()){ /* no-op, preservo estructura */ }
+
+      // Recalcular spots por usuario (más simple y claro)
+      const byUserSpots = new Map();
+      for(const r of rowsF){
+        const [usuario, spot] = r._spotKey.split('|');
+        if(!byUserSpots.has(usuario)) byUserSpots.set(usuario, new Map());
+        const m = byUserSpots.get(usuario);
+        m.set(spot, (m.get(spot)||0) + 1);
+      }
+      for(const u of Array.from(byUserSpots.keys()).sort(by)){
+        const m = byUserSpots.get(u);
+        for(const [spot,c] of Array.from(m.entries()).sort((x,y)=>y[1]-x[1])){
+          const [lat,lon] = spot.split(',');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${u}</td><td class="mono">${lat}</td><td class="mono">${lon}</td><td>${c}</td>`;
+          tblSpots.appendChild(tr);
+        }
+      }
+    }
+
+    // Carga JSON + poblar selects (automática)
+    async function loadRemoteJson(){
+      try{
+        const res = await fetch(JSON_URL, {mode:'cors'});
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const arr = Array.isArray(data) ? data : (Array.isArray(data?.rows) ? data.rows : []);
+        if(arr.length===0){ alert('El JSON no contiene registros reconocibles.'); return; }
+
+        // Normaliza claves en MAYÚSCULAS
+        const norm = (o)=>{ const n={}; for(const k of Object.keys(o)){ n[k.toUpperCase()] = o[k]; } return n; };
+        rawRows = arr.map(norm);
+
+        // Rol y usuarios
+        roleField = pickRoleField(document.getElementById('roleSelect').value);
+        const users = usersForRole(roleField);
+        const userSel = document.getElementById('userSelect');
+        userSel.innerHTML = '<option value="">(Selecciona)</option>' + users.map(v=>`<option>${v}</option>`).join('');
+
+        // Sucursales (se llenan al elegir usuario)
+        document.getElementById('fltSucursal').innerHTML = '<option value="">(Todas)</option>';
+
+      }catch(err){
+        console.error(err);
+        alert('No se pudo cargar el JSON remoto. Revisa la URL o las reglas CORS.');
+      }
+    }
+
+    // Eventos de selects
+    document.getElementById('roleSelect').addEventListener('change', ()=>{
+      roleField = pickRoleField(document.getElementById('roleSelect').value);
+      const users = usersForRole(roleField);
+      const userSel = document.getElementById('userSelect');
+      userSel.innerHTML = '<option value="">(Selecciona)</option>' + users.map(v=>`<option>${v}</option>`).join('');
+      document.getElementById('fltSucursal').innerHTML = '<option value="">(Todas)</option>';
+    });
+    document.getElementById('userSelect').addEventListener('change', ()=>{
+      const user = document.getElementById('userSelect').value;
+      const sucs = user ? sucursalesForUser(roleField, user) : [];
+      const sel = document.getElementById('fltSucursal');
+      sel.innerHTML = '<option value="">(Todas)</option>' + sucs.map(v=>`<option>${v}</option>`).join('');
+    });
+
+    document.getElementById('btnRender').addEventListener('click', buildMatrix);
+
+    // Inicio: fechas por defecto + carga automática del JSON + primer render
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      setDefaultDates();
+      await loadRemoteJson();            // carga datos en automático
+      // Si hay usuarios, selecciona el primero y llena sucursales
+      const userSel = document.getElementById('userSelect');
+      if(userSel.options.length > 1){
+        userSel.selectedIndex = 1;
+        const user = userSel.value;
+        const sucs = user ? sucursalesForUser(roleField, user) : [];
+        const sel = document.getElementById('fltSucursal');
+        sel.innerHTML = '<option value="">(Todas)</option>' + sucs.map(v=>`<option>${v}</option>`).join('');
+      }
+      buildMatrix();
+    });
+  </script>
+</body>
+</html>
