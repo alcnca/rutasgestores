@@ -1,170 +1,666 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Rutas de Gestores</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matriz Horaria + Mapa (08:00–19:00)</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
   <style>
-    #map { height: 85vh; width: 100%; margin-top: 10px; }
-    .filtros { margin-bottom: 8px; }
-    .filtros label { margin-right: 15px; }
-    #ultima-actualizacion { font-size: 12px; color: #333; margin-top: 5px; }
+    :root{
+      --grid-border:#cfd4da; --dot:#0d6efd; --empty:#ffd9d9; --empty-green:#d7f9cf; --off:#f5f6fa; --highlight:#fff0c2;
+    }
+    body{background:#fff}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .smallnote{font-size:.9rem;color:#6c757d}
+
+    /* Tabla de horario */
+    .table-grid th,.table-grid td{border:1px solid var(--grid-border);text-align:center;vertical-align:middle;padding:.25rem .35rem;font-size:.84rem}
+    .table-grid thead th{position:sticky;top:0;background:#fff;z-index:2;box-shadow:0 1px 0 0 var(--grid-border)}
+    .nowrap{white-space:nowrap}
+    .w-hour{min-width:2.4rem}
+    .cell-dot{width:1.4rem;height:1.4rem;display:inline-flex;align-items:center;justify-content:center;margin:auto}
+    .cell-dot::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--dot);display:inline-block}
+    .cell-empty::after{display:none}
+    .cell-empty-wk{background:var(--empty); outline:1px solid #ffb3b3}
+    .cell-empty-green{background:var(--empty-green)!important; outline:1px solid #b7f0c1!important}
+    .cell-off{background:var(--off);color:#adb5bd}
+    .badge-spot{background:#e7f1ff;color:#0d6efd;border:1px solid #b6d4fe}
+    .scroll-x{overflow-x:auto}
+    .col-highlight{background:var(--highlight)!important}
+
+    /* Modo compacto */
+    #grid.table-grid.compact { font-size: .60rem; }
+    #grid.table-grid.compact th,
+    #grid.table-grid.compact td { padding: .12rem .20rem; }
+    #grid.table-grid.compact .w-hour { min-width: 1.35rem; }
+    #grid.table-grid.compact .cell-dot { width: 1rem; height: 1rem; }
+    #grid.table-grid.compact .cell-dot::after { width: 6px; height: 6px; }
+    #grid.table-grid.compact .cell-empty-wk { outline: 1px solid #f5a9a9; }
+    #grid.table-grid.compact .cell-empty-green { outline: 1px solid #9fe3a8; }
+
+    /* Vacíos / Spots compactos */
+    #tblGaps, #tblSpots { font-size: .82rem; line-height: 1.25; }
+    #tblGaps th, #tblGaps td, #tblSpots th, #tblSpots td { padding: .20rem .40rem; vertical-align: middle; }
+    #tblGaps thead th, #tblSpots thead th { font-weight: 600; letter-spacing: .2px; }
+    #tblGaps td.mono, #tblSpots td.mono { font-size: .78rem; }
+    #tblGaps td:nth-child(2){ white-space:nowrap; font-size:.82rem; letter-spacing:.2px; }
+    #tblGaps td:nth-child(3), #tblGaps th:nth-child(3){ text-align:center; }
+
+    /* Gestiones diarias — 6 columnas, fuente pequeña */
+    .daily-card table { font-size: .78rem; }
+    .daily-card th, .daily-card td { padding: .22rem .35rem; }
+    .daily-card tbody tr { cursor:pointer; }
+    .daily-card tbody tr:hover { background:#f1f3f5; }
+    .daily-card td:first-child { text-align: left; }     /* fecha */
+    .daily-card td:nth-child(2) { text-align: center; }  /* número centrado */
+
+    /* KPIs lineales */
+    .kpi-bar .badge{font-size:.88rem;padding:.45rem .6rem}
+
+    /* Mapa */
+    #map { height: 58vh; width: 100%; }
+    .mi-icono div{
+      border:2px solid rgba(255,255,255,.9);
+      box-shadow:0 0 0 1px rgba(0,0,0,.15);
+    }
+    @media (max-width: 991px){
+      #map{height:52vh}
+    }
   </style>
 </head>
 <body>
-  <h2>Mapa de Rutas de Gestores</h2>
+  <main class="container py-3">
+    <header class="mb-3">
+      <h1 class="h4 mb-1">Seguimiento de Gestores - Acreimex -</h1>
+      <p class="smallnote mb-0">
+        Reporte muestra actividad de L-V 08:00 am – 19:00 y Sáb de 08.00 AM A 15:00 PM.
+        Para el Proceso se considera Horario Laboral: L–V 09:00 am – 18:00 y Sáb de 09.00 AM A 14:00 PM.
+      </p>
+    </header>
 
-  <div class="filtros">
-    <label for="sucursalSelect">Sucursal:</label>
-    <select id="sucursalSelect"></select>
+    <!-- CONTROLES -->
+    <section class="card mb-3">
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <!-- Usuario estrecho -->
+          <div class="col-12 col-md-3">
+            <label class="form-label">Usuario</label>
+            <select id="userSelect" class="form-select"><option value="">(Selecciona)</option></select>
+            
+          </div>
+          <div class="col-12 col-md-4 col-lg-3">
+            <label class="form-label">Sucursal</label>
+            <select id="fltSucursal" class="form-select"><option value="">(Todas)</option></select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Fecha desde</label>
+            <input id="fltDesde" type="date" class="form-control" />
+          </div>
+          <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label">Fecha hasta</label>
+            <input id="fltHasta" type="date" class="form-control" />
+          </div>
+          <div class="col-12 col-lg-4 d-grid d-md-flex gap-2">
+            <button id="btnRender" class="btn btn-success flex-fill">Generar Reporte</button>
+            <button id="btnCompact" class="btn btn-outline-secondary">Modo compacto</button>
+          </div>
+        </div>
+      
+      </div>
+    </section>
 
-    <label for="gestorSelect">Gestor:</label>
-    <select id="gestorSelect"></select>
+    <!-- MATRIZ + META -->
+    <section class="mb-3">
+      <div id="metaBar" class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <span class="badge rounded-pill text-bg-secondary" id="badgeRows">0 GESTIONES</span>
+        </div>
+        
+      </div>
+      <div class="scroll-x">
+        <table id="grid" class="table table-grid table-sm">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="mt-2">
+        <span class="badge rounded-pill text-bg-secondary" id="badgeGroups">0 combinaciones (usuario+fecha)</span>
+      </div>
+    </section>
 
-    <label for="fechaInput">Fecha:</label>
-    <input type="text" id="fechaInput" placeholder="Selecciona una fecha">
-    
-    <div id="ultima-actualizacion"></div>
-  </div>
+    <!-- KPIs LINEALES -->
+    <section class="card mb-3">
+      <div class="card-body kpi-bar d-flex flex-wrap gap-2">
+        <span class="badge rounded-pill text-bg-primary">Total: <span id="kpiTotal">0</span></span>
+        <span class="badge rounded-pill text-bg-secondary">Días laborables (L–V): <span id="kpiDias">0</span></span>
+        <span class="badge rounded-pill text-bg-success">Promedio/día: <span id="kpiProm">0.00</span></span>
+      </div>
+    </section>
 
-  <div id="map"></div>
+    <!-- Gestiones diarias — 5 columnas -->
+    <section class="mb-3">
+      <div class="row row-cols-1 row-cols-md-3 row-cols-lg-5 g-3">
+        <!-- A -->
+        <div class="col">
+          <div class="card h-100 daily-card">
+            <div class="card-body">
+             
+              <div class="scroll-x">
+                <table id="tblDailyA" class="table table-sm table-striped mb-0">
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- B -->
+        <div class="col">
+          <div class="card h-100 daily-card">
+            <div class="card-body">
+             
+              <div class="scroll-x">
+                <table id="tblDailyB" class="table table-sm table-striped mb-0">
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- C -->
+        <div class="col">
+          <div class="card h-100 daily-card">
+            <div class="card-body">
+              
+              <div class="scroll-x">
+                <table id="tblDailyC" class="table table-sm table-striped mb-0">
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- D -->
+        <div class="col">
+          <div class="card h-100 daily-card">
+            <div class="card-body">
+              <div class="scroll-x">
+                <table id="tblDailyD" class="table table-sm table-striped mb-0">
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- E -->
+        <div class="col">
+          <div class="card h-100 daily-card">
+            <div class="card-body">
+              <div class="scroll-x">
+                <table id="tblDailyE" class="table table-sm table-striped mb-0">
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+       </div>
+      </div>
+    </section>
 
+    <!-- MAPA -->
+    <section class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          
+          <button class="btn btn-outline-primary btn-sm d-lg-none" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#mapCollapse"
+                  aria-expanded="false" aria-controls="mapCollapse" id="btnToggleMap">
+            Mostrar mapa
+          </button>
+        </div>
+
+        <div id="mapCollapse" class="collapse mt-2">
+          <div id="map"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vacíos y Lugares repetidos -->
+    <section class="row g-3">
+      <div class="col-lg-7">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h6 mb-3">INACTIVIDAD</h2>
+            <div class="scroll-x">
+              <table id="tblGaps" class="table table-sm table-striped">
+                <thead><tr><th>USUARIO</th><th>FECHA</th><th> Numero Hrs Inactivas</th><th>Horas sin Actividad</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="card h-100">
+          <div class="card-body">
+            <h2 class="h6 mb-3">Gestiones Realizadas en un Mismo Lugar</h2>
+            <div class="scroll-x">
+              <table id="tblSpots" class="table table-sm table-striped">
+                <thead><tr><th>USUARIO</th><th>LAT_RED</th><th>LON_RED</th><th>Gestiones</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-  <script>
-    const map = L.map("map", { zoomControl: false }).setView([19.4326, -99.1332], 12);
-    L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors"
-    }).addTo(map);
+<script>
+  // ===== Config =====
+  const JSON_URL = "https://raw.githubusercontent.com/alcnca/rutasgestores/main/gestores.json";
+  const HOUR_START = 8;  // vista
+  const HOUR_END   = 19; // vista
+  const HOURS = Array.from({length: HOUR_END - HOUR_START + 1}, (_, i) => HOUR_START + i);
 
-    let allData = [];
-    let currentRoute = null;
-    let currentMarkers = [];
-    let calendario;
+  // ===== Utils =====
+  const uniq = arr => Array.from(new Set(arr));
+  const by = (a,b) => a.localeCompare(b,'es');
+  const pad2 = n => String(n).padStart(2,'0');
+  const hourLabel = h => `${pad2(h)}:00`;
+  const normalizeHourStr = s => (s||'').replace(/\s+/g,' ').replace('a. m.','AM').replace('p. m.','PM').replace('a. m','AM').replace('p. m','PM').trim();
+  function parseTimeToHourBase(str){
+    if(!str) return null; const s = normalizeHourStr(str).toUpperCase();
+    const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/); if(!m) return null;
+    let hh = parseInt(m[1],10); const ap = m[4]||null;
+    if(ap){ if(ap==='AM'){ if(hh===12) hh=0; } else { if(hh!==12) hh+=12; } }
+    return (hh>=0&&hh<=23)? hh : null;
+  }
+  function toISODate(dstr){
+    if(!dstr) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(dstr)) return dstr;
+    const m = dstr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(m) return `${m[3]}-${m[2]}-${m[1]}`;
+    const d = new Date(dstr); if(Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  }
+  const roundCoord = (v,dec)=>{ const p=Math.pow(10,dec); return Math.round(Number(v)*p)/p; };
+  const dowOfISO = iso => new Date(iso+'T00:00:00').getDay();
 
-    const colores = ["blue", "red", "green", "purple", "orange", "brown"];
-    const colorGestor = {};
+  // HORARIO VISUAL: L–V 09–18 (sin 14); Sáb 09–14
+  function workHoursForDate(iso){
+    const dow = dowOfISO(iso); const set = new Set();
+    if (dow >= 1 && dow <= 5) { for (let h = 9; h <= 18; h++) if(h!==14) set.add(h); }
+    else if (dow === 6) { for (let h = 9; h <= 14; h++) set.add(h); }
+    return set;
+  }
+  // HORARIO PARA CONTEO: L–V 09–17 (sin 14); Sáb 09–14
+  function countHoursForDate(iso){
+    const dow = dowOfISO(iso); const set = new Set();
+    if (dow >= 1 && dow <= 5) { for (let h = 9; h <= 17; h++) if(h!==14) set.add(h); }
+    else if (dow === 6) { for (let h = 9; h <= 14; h++) set.add(h); }
+    return set;
+  }
+  function countWorkdays(fromISO, toISO){
+    if(!fromISO || !toISO) return 0;
+    const d = new Date(fromISO + 'T00:00:00'); const end = new Date(toISO + 'T00:00:00'); let c = 0;
+    while(d <= end){ const dow = d.getDay(); if(dow >= 1 && dow <= 5) c++; d.setDate(d.getDate()+1); }
+    return c;
+  }
 
-    // 📌 Cargar datos
-    fetch("gestores.json").then(res => {
-      const lastModified = res.headers.get("Last-Modified");
-      if (lastModified) {
-        const fecha = new Date(lastModified);
-        document.getElementById("ultima-actualizacion").innerText =
-          "Última actualización: " + fecha.toLocaleDateString("es-ES",
-            { day: "numeric", month: "long", year: "numeric" });
+  // ===== Estado =====
+  let rawRows = [];
+  const getUserField = r => (r['ASESOR']||r['GESTOR']||r['USUARIO']||'').toString().trim();
+
+  // ====== MAPA ======
+  let map, currentRoute=null, currentMarkers=[];
+  const color = "blue";
+  function crearIcono(numero, color) {
+    return L.divIcon({
+      className: 'mi-icono',
+      html: `<div style="background:${color};color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;">${numero}</div>`,
+      iconSize: [26, 26]
+    });
+  }
+
+  // ====== Carga de datos ======
+  async function loadRemoteJson(){
+    try{
+      const res = await fetch(`${JSON_URL}?t=${Date.now()}`, {mode:'cors', cache:'no-store'});
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const norm=o=>{const n={}; for(const k of Object.keys(o)){ n[k.toUpperCase()]=o[k]; } return n; };
+      rawRows = (Array.isArray(data)?data:(data?.rows||[])).map(norm);
+
+      // Usuarios
+      const users = uniq(rawRows.map(getUserField).filter(Boolean)).sort(by);
+      const userSel = document.getElementById('userSelect');
+      userSel.innerHTML = users.length
+        ? '<option value="">(Selecciona)</option>' + users.map(v=>`<option>${v}</option>`).join('')
+        : '<option value="">(Sin usuarios)</option>';
+
+      // Sucursales (según usuario elegido)
+      document.getElementById('fltSucursal').innerHTML = '<option value="">(Todas)</option>';
+    }catch(err){
+      console.error(err);
+      alert('No se pudo cargar el JSON remoto.');
+    }
+  }
+
+  // ========= Auxiliares de filtros =========
+  function sucursalesForUser(user){
+    return uniq(rawRows.filter(r=> getUserField(r)===user)
+                      .map(r=> (r['SUCURSAL']||'').toString().trim())
+                      .filter(Boolean)).sort(by);
+  }
+
+  // ========= Render Matriz & KPI =========
+  function buildMatrix(){
+    const user=document.getElementById('userSelect').value;
+    const suc=document.getElementById('fltSucursal').value;
+    const desde=document.getElementById('fltDesde').value;
+    const hasta=document.getElementById('fltHasta').value;
+    const dec=5;
+
+    const pre = rawRows.map(r=>{
+      const horaSrc=(r['HORA2']&&r['HORA2'].toString().trim()!=='')? r['HORA2'] : r['HORA'];
+      const hourBase=parseTimeToHourBase(horaSrc);
+      const fechaISO=toISODate(r['FECHA_GESTION']||r['FECHA']||'');
+      const latr=roundCoord(r['LATITUD'],dec);
+      const lonr=roundCoord(r['LONGITUD'],dec);
+      const usuario=getUserField(r);
+      return {...r,_usuario:usuario,_fecha:fechaISO,_hourBase:hourBase,_lat_r:latr,_lon_r:lonr,_spotKey:`${usuario}|${latr},${lonr}`};
+    }).filter(r=> r._fecha && r._usuario);
+
+    const rowsF = pre.filter(r=>
+      (!user||r._usuario===user) &&
+      (!suc||(r['SUCURSAL']||'').toString().trim()===suc) &&
+      (!desde||r._fecha>=desde) &&
+      (!hasta||r._fecha<=hasta)
+    );
+
+    document.getElementById('badgeRows').textContent = `${rowsF.length} Gestiones`;
+
+    // groups
+    const mapG=new Map();
+    for(const r of rowsF){
+      if(r._hourBase==null) continue;
+      const k=`${r._usuario}|${r._fecha}`;
+      if(!mapG.has(k)) mapG.set(k,{usuario:r._usuario,fecha:r._fecha,hours:new Set(),rows:[]});
+      const g=mapG.get(k);
+      g.hours.add(r._hourBase);
+      g.rows.push(r);
+    }
+    const groups=Array.from(mapG.values()).sort((a,b)=> by(a.usuario,b.usuario)||by(a.fecha,b.fecha));
+    document.getElementById('badgeGroups').textContent = `${groups.length} Dias Con Gestiones`;
+
+    // KPIs + diario (6 columnas)
+    const dailyMap=new Map(); for(const r of rowsF){ const d=r._fecha; dailyMap.set(d,(dailyMap.get(d)||0)+1); }
+    const totalGest=rowsF.length;
+    const workdays=countWorkdays(desde,hasta);
+    const avg=workdays? totalGest/workdays : 0;
+    document.getElementById('kpiTotal').textContent=totalGest;
+    document.getElementById('kpiDias').textContent=workdays;
+    document.getElementById('kpiProm').textContent=avg.toFixed(2);
+
+    const entries = Array.from(dailyMap.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+    const DAILY_COLS = 5;
+    const size = Math.ceil(entries.length / DAILY_COLS);
+    const chunk = (arr, s, i)=> arr.slice(i*s, (i+1)*s);
+
+    const cols = [
+      chunk(entries, size, 0),
+      chunk(entries, size, 1),
+      chunk(entries, size, 2),
+      chunk(entries, size, 3),
+      chunk(entries, size, 4),
+      ];
+
+    const tbs = [
+      document.querySelector('#tblDailyA tbody'),
+      document.querySelector('#tblDailyB tbody'),
+      document.querySelector('#tblDailyC tbody'),
+      document.querySelector('#tblDailyD tbody'),
+      document.querySelector('#tblDailyE tbody'),
+      ];
+    tbs.forEach(tb=> tb && (tb.innerHTML=''));
+
+    const rowTpl = ([fecha,cnt]) => `<tr data-fecha="${fecha}"><td>${fecha}</td><td>${cnt}</td></tr>`;
+    cols.forEach((c,idx)=> c.forEach(e=> tbs[idx] && tbs[idx].insertAdjacentHTML('beforeend', rowTpl(e))));
+
+    // same spot count
+    const spotCount=new Map(); for(const r of rowsF){ const k=r._spotKey; spotCount.set(k,(spotCount.get(k)||0)+1); }
+
+    // header
+    const thead=document.querySelector('#grid thead'); const tbody=document.querySelector('#grid tbody');
+    thead.innerHTML=''; tbody.innerHTML='';
+    const trh=document.createElement('tr');
+    ['USUARIO','FECHA','MISMO LUGAR'].forEach(h=>{ const th=document.createElement('th'); th.textContent=h; trh.appendChild(th); });
+    for(const h of HOURS){
+      const thEl=document.createElement('th'); thEl.className='w-hour nowrap'; thEl.textContent=`${pad2(h)}:00`; thEl.dataset.hour=h; thEl.style.cursor='pointer'; trh.appendChild(thEl);
+    }
+    thead.appendChild(trh);
+
+    // body con vacíos
+    const gapsRows=[];
+    for(const g of groups){
+      const tr=document.createElement('tr');
+      tr.appendChild(Object.assign(document.createElement('td'),{textContent:g.usuario}));
+      tr.appendChild(Object.assign(document.createElement('td'),{textContent:g.fecha}));
+      const uniqSpots=uniq(g.rows.map(r=>`${r._lat_r},${r._lon_r}`));
+      const repeated=uniqSpots.filter(s=> spotCount.get(`${g.usuario}|${s}`)>1);
+      const tdS=document.createElement('td'); tdS.innerHTML=`<span class="badge rounded-pill badge-spot">${repeated.length} repetidos</span>`; tr.appendChild(tdS);
+
+      const wkSet  = workHoursForDate(g.fecha);
+      const cntSet = countHoursForDate(g.fecha);
+      const emptiesVisual = HOURS.filter(h => wkSet.has(h) && !g.hours.has(h));
+
+      // sugerida cerca de 14:00 (L–V)
+      let greenHour=null; const dow=dowOfISO(g.fecha);
+      if(dow>=1&&dow<=5&&emptiesVisual.length){
+        greenHour=emptiesVisual.reduce((best,h)=>{
+          if(best===null) return h;
+          const da=Math.abs(h-14), db=Math.abs(best-14);
+          if(da<db) return h; if(da>db) return best;
+          return (h<best)?h:best;
+        }, null);
       }
-      return res.json();
-    }).then(data => {
-      allData = data;
-      initFiltros();
+
+      for(const h of HOURS){
+        const td=document.createElement('td'); td.className='w-hour';
+        const has=g.hours.has(h); const off=!wkSet.has(h);
+        if(off){
+          if(has){ td.classList.add('cell-off'); td.innerHTML='<span class="cell-dot"></span>'; }
+          else { td.classList.add('cell-off'); td.textContent='—'; }
+        } else if(has){
+          td.innerHTML='<span class="cell-dot"></span>';
+        } else {
+          if(h===greenHour) td.classList.add('cell-empty-green');
+          else td.classList.add('cell-empty-wk');
+          td.innerHTML='<span class="cell-dot cell-empty"></span>';
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+
+      // Vacíos REPORTE (conteo)
+      const emptiesReportHours = HOURS.filter(h => cntSet.has(h) && !g.hours.has(h));
+      gapsRows.push({usuario:g.usuario,fecha:g.fecha,count:emptiesReportHours.length,list:emptiesReportHours.map(hourLabel).join(', ')});
+    }
+
+    // highlight columna
+    thead.querySelectorAll('th[data-hour]').forEach(th=>{
+      th.addEventListener('click',()=>{
+        const hour=Number(th.dataset.hour);
+        const offset=(hour-HOUR_START)+3;
+        tbody.querySelectorAll('tr').forEach(tr=>{
+          tr.querySelectorAll('td').forEach((td,idx)=>{
+            td.classList.toggle('col-highlight', idx===offset);
+          });
+        });
+      });
     });
 
-    function initFiltros() {
-      const sucursales = [...new Set(allData.map(r => r.SUCURSAL))].sort();
-      const sucursalSelect = document.getElementById("sucursalSelect");
-      sucursalSelect.innerHTML = `<option value="">-- Selecciona --</option>`;
-      sucursales.forEach(s => {
-        let opt = document.createElement("option");
-        opt.value = s;
-        opt.textContent = s;
-        sucursalSelect.appendChild(opt);
-      });
-
-      sucursalSelect.addEventListener("change", actualizarGestores);
-      document.getElementById("gestorSelect").addEventListener("change", actualizarFechas);
-
-      calendario = flatpickr("#fechaInput", {
-        dateFormat: "Y-m-d",
-        disable: [],   // se llenará dinámicamente
-        onChange: function(selectedDates, dateStr) {
-          if (dateStr) actualizarMapa(dateStr);
-        }
-      });
+    // gaps table
+    const gapsTbody=document.querySelector('#tblGaps tbody'); gapsTbody.innerHTML='';
+    for(const g of gapsRows.sort((a,b)=> by(a.usuario,b.usuario)||by(a.fecha,b.fecha))){
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${g.usuario}</td><td>${g.fecha}</td><td>${g.count}</td><td class="mono">${g.list}</td>`;
+      gapsTbody.appendChild(tr);
     }
 
-    function actualizarGestores() {
-      const sucursal = document.getElementById("sucursalSelect").value;
-      const gestorSelect = document.getElementById("gestorSelect");
-      gestorSelect.innerHTML = `<option value="">-- Selecciona --</option>`;
-      
-      if (!sucursal) return;
-
-      const gestores = [...new Set(allData
-        .filter(r => r.SUCURSAL === sucursal)
-        .map(r => r.ASESOR))].sort();
-
-      gestores.forEach((g, i) => {
-        colorGestor[g] = colores[i % colores.length];
-        let opt = document.createElement("option");
-        opt.value = g;
-        opt.textContent = g;
-        gestorSelect.appendChild(opt);
-      });
+    // spots table
+    const tblSpots=document.querySelector('#tblSpots tbody'); tblSpots.innerHTML='';
+    const byUserSpots=new Map();
+    for(const r of rowsF){
+      const [usuario,spot]=r._spotKey.split('|');
+      if(!byUserSpots.has(usuario)) byUserSpots.set(usuario,new Map());
+      const m=byUserSpots.get(usuario);
+      m.set(spot,(m.get(spot)||0)+1);
+    }
+    for(const u of Array.from(byUserSpots.keys()).sort(by)){
+      const m=byUserSpots.get(u);
+      for(const [spot,c] of Array.from(m.entries()).sort((x,y)=>y[1]-x[1])){
+        const [lat,lon]=spot.split(',');
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${u}</td><td class="mono">${lat}</td><td class="mono">${lon}</td><td>${c}</td>`;
+        tblSpots.appendChild(tr);
+      }
     }
 
-    function actualizarFechas() {
-      const sucursal = document.getElementById("sucursalSelect").value;
-      const gestor = document.getElementById("gestorSelect").value;
-      if (!sucursal || !gestor) return;
+    // CLICK EN GESTIONES DIARIAS -> actualizar mapa SIN mover la página
+    const onDailyClick = (ev)=>{
+      const tr = ev.target.closest('tr');
+      if(!tr || !tr.dataset.fecha) return;
+      actualizarMapa(tr.dataset.fecha);
+    };
+    ['#tblDailyA','#tblDailyB','#tblDailyC','#tblDailyD','#tblDailyE'].forEach(sel=>{
+      document.querySelectorAll(`${sel} tbody tr`).forEach(tr=> tr.addEventListener('click', onDailyClick));
+    });
 
-      const fechasDisponibles = [...new Set(allData
-        .filter(r => r.SUCURSAL === sucursal && r.ASESOR === gestor)
-        .map(r => r.FECHA_GESTION))].sort();
+    // Render inicial del mapa con la primera fecha (si existe)
+    if (entries.length) actualizarMapa(entries[0][0]);
+  }
 
-      // Bloquear todas las fechas excepto estas
-      calendario.set("enable", fechasDisponibles);
-      calendario.clear();
+  // ========= MAPA =========
+  function actualizarMapa(fecha){
+    const suc = document.getElementById("fltSucursal").value;
+    const user = document.getElementById("userSelect").value;
+    if(!user || !fecha) return;
+
+    if (currentRoute) { map.removeLayer(currentRoute); currentRoute = null; }
+    currentMarkers.forEach(m => map.removeLayer(m));
+    currentMarkers = [];
+
+    const registros = rawRows
+      .filter(r => getUserField(r)===user &&
+                   (!suc || (r['SUCURSAL']||'').toString().trim()===suc) &&
+                   toISODate(r['FECHA_GESTION']||r['FECHA']||'') === fecha)
+      .map(r => ({...r, _h: normalizeHourStr((r['HORA2']||r['HORA']||'')+'' )}))
+      .sort((a,b) => a._h.localeCompare(b._h));
+
+    if(!registros.length) return;
+
+    const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
+
+    if(!map){
+      map = L.map("map", { zoomControl: false }).setView([19.4326, -99.1332], 12);
+      L.control.zoom({ position: "bottomright" }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
+      // abrir mapa por defecto en desktop
+      const collEl = document.getElementById('mapCollapse');
+      const coll = new bootstrap.Collapse(collEl, { toggle:false });
+      if (window.innerWidth >= 992) coll.show();
     }
 
-    function crearIcono(numero, color) {
-      return L.divIcon({
-        className: 'mi-icono',
-        html: `<div style="background:${color};color:white;
-                          border-radius:50%;width:25px;height:25px;
-                          display:flex;align-items:center;justify-content:center;
-                          font-size:14px;font-weight:bold;">
-                  ${numero}
-               </div>`,
-        iconSize: [25, 25]
-      });
+    const first = coords[0];
+    map.setView(first, 14, {animate:true});
+
+    currentRoute = L.polyline(coords, { color }).addTo(map);
+    setTimeout(()=>{ map.flyToBounds(currentRoute.getBounds(), {padding:[40,40], duration:.7}); }, 150);
+
+    registros.forEach((r,i)=>{
+      const icono = crearIcono(i+1, color);
+      const marker = L.marker([r.LATITUD, r.LONGITUD], {icon:icono})
+        .bindPopup(`<b>${i+1}. ${(r.NOMBRE_COMPLETO||'').toString()}</b><br>
+                    Hora: ${(r.HORA2||r.HORA||'').toString()}<br>
+                    Acción: ${(r.ACCION||'').toString()}<br>
+                    Sucursal: ${(r.SUCURSAL||'').toString()}`);
+      marker.addTo(map);
+      currentMarkers.push(marker);
+    });
+  }
+
+  // ===== Eventos =====
+  document.getElementById('userSelect').addEventListener('change', ()=>{
+    const user=document.getElementById('userSelect').value;
+    const sucs=user? sucursalesForUser(user) : [];
+    const sel=document.getElementById('fltSucursal');
+    sel.innerHTML='<option value="">(Todas)</option>'+sucs.map(v=>`<option>${v}</option>`).join('');
+  });
+  document.getElementById('btnRender').addEventListener('click', buildMatrix);
+
+  // Toggle compacto
+  document.getElementById('btnCompact').addEventListener('click', ()=>{
+    document.getElementById('grid').classList.toggle('compact');
+  });
+
+  // Invalidate Leaflet cuando el collapse se muestra/oculta (en móvil)
+  document.addEventListener('shown.bs.collapse', (ev)=>{
+    if(ev.target.id === 'mapCollapse' && typeof map?.invalidateSize === 'function'){
+      setTimeout(()=> map.invalidateSize(), 150);
+    }
+    if(ev.target.id === 'mapCollapse'){
+      document.getElementById('btnToggleMap').innerText = 'Ocultar mapa';
+    }
+  });
+  document.addEventListener('hidden.bs.collapse', (ev)=>{
+    if(ev.target.id === 'mapCollapse'){
+      document.getElementById('btnToggleMap').innerText = 'Mostrar mapa';
+    }
+  });
+
+  // ===== Init =====
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    // collapse mapa: abierto en ≥lg, cerrado en <lg
+    const mapCollEl = document.getElementById('mapCollapse');
+    const mapColl = new bootstrap.Collapse(mapCollEl, { toggle:false });
+    if (window.innerWidth >= 992) mapColl.show(); else mapColl.hide();
+
+    // fechas por defecto
+    const t=new Date(); const yyyy=t.getFullYear(); const mm=pad2(t.getMonth()+1); const dd=pad2(t.getDate());
+    document.getElementById('fltDesde').value=`${yyyy}-${mm}-01`;
+    document.getElementById('fltHasta').value=`${yyyy}-${mm}-${dd}`;
+
+    await loadRemoteJson();
+
+    const userSel=document.getElementById('userSelect');
+    if(userSel.options.length>1){
+      userSel.selectedIndex=1;
+      const user=userSel.value;
+      const sucs=user? sucursalesForUser(user):[];
+      const sel=document.getElementById('fltSucursal');
+      sel.innerHTML='<option value="">(Todas)</option>'+sucs.map(v=>`<option>${v}</option>`).join('');
     }
 
-    function actualizarMapa(fecha) {
-      const sucursal = document.getElementById("sucursalSelect").value;
-      const gestor = document.getElementById("gestorSelect").value;
-      if (!sucursal || !gestor || !fecha) return;
+    buildMatrix();
+  });
+</script>
 
-      if (currentRoute) { map.removeLayer(currentRoute); currentRoute = null; }
-      currentMarkers.forEach(m => map.removeLayer(m));
-      currentMarkers = [];
-
-      const registros = allData
-        .filter(r => r.SUCURSAL === sucursal && r.ASESOR === gestor && r.FECHA_GESTION === fecha)
-        .sort((a, b) => a.HORA.localeCompare(b.HORA));
-
-      if (registros.length === 0) return;
-
-      const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
-      const color = colorGestor[gestor] || "blue";
-
-      currentRoute = L.polyline(coords, { color }).addTo(map);
-      map.fitBounds(currentRoute.getBounds());
-
-      registros.forEach((r, i) => {
-        const icono = crearIcono(i + 1, color);
-        const marker = L.marker([r.LATITUD, r.LONGITUD], { icon: icono })
-          .bindPopup(`<b>${i + 1}. ${r.NOMBRE_COMPLETO}</b><br>
-                      Hora: ${r.HORA}<br>
-                      Acción: ${r.ACCION}<br>
-                      Sucursal: ${r.SUCURSAL}`);
-        marker.addTo(map);
-        currentMarkers.push(marker);
-      });
-    }
-  </script>
 </body>
 </html>
