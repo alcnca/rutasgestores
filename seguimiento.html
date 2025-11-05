@@ -18,8 +18,13 @@
     .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
     .smallnote{font-size:.9rem;color:#6c757d}
 
-    /* Tabla de horario */
-    .table-grid th,.table-grid td{border:1px solid var(--grid-border);text-align:center;vertical-align:middle;padding:.25rem .35rem;font-size:.84rem}
+    /* Tabla de horario (matriz principal) */
+    .table-grid th,.table-grid td{
+      border:1px solid var(--grid-border);
+      text-align:center;vertical-align:middle;
+      padding:.25rem .35rem;
+      font-size:.66rem; /* <<< CAMBIA AQUÍ EL TAMAÑO de la MATRIZ si lo deseas */
+    }
     .table-grid thead th{position:sticky;top:0;background:#fff;z-index:2;box-shadow:0 1px 0 0 var(--grid-border)}
     .nowrap{white-space:nowrap}
     .w-hour{min-width:2.4rem}
@@ -33,31 +38,25 @@
     .scroll-x{overflow-x:auto}
     .col-highlight{background:var(--highlight)!important}
 
-    /* Modo compacto */
-    #grid.table-grid.compact { font-size: .60rem; }
-    #grid.table-grid.compact th,
-    #grid.table-grid.compact td { padding: .12rem .20rem; }
-    #grid.table-grid.compact .w-hour { min-width: 1.35rem; }
-    #grid.table-grid.compact .cell-dot { width: 1rem; height: 1rem; }
-    #grid.table-grid.compact .cell-dot::after { width: 6px; height: 6px; }
-    #grid.table-grid.compact .cell-empty-wk { outline: 1px solid #f5a9a9; }
-    #grid.table-grid.compact .cell-empty-green { outline: 1px solid #9fe3a8; }
-
-    /* Vacíos / Spots compactos */
+    /* Tablas pequeñas */
     #tblGaps, #tblSpots { font-size: .82rem; line-height: 1.25; }
     #tblGaps th, #tblGaps td, #tblSpots th, #tblSpots td { padding: .20rem .40rem; vertical-align: middle; }
     #tblGaps thead th, #tblSpots thead th { font-weight: 600; letter-spacing: .2px; }
     #tblGaps td.mono, #tblSpots td.mono { font-size: .78rem; }
-    #tblGaps td:nth-child(2){ white-space:nowrap; font-size:.82rem; letter-spacing:.2px; }
-    #tblGaps td:nth-child(3), #tblGaps th:nth-child(3){ text-align:center; }
 
-    /* Gestiones diarias — 6 columnas, fuente pequeña */
-    .daily-card table { font-size: .78rem; }
-    .daily-card th, .daily-card td { padding: .22rem .35rem; }
+    /* Gestiones diarias — 4 columnas, letra pequeña y en negritas */
+    .daily-card table {
+      font-size: .70rem; /* <<< CAMBIA AQUÍ EL TAMAÑO de “Gestiones diarias” */
+    }
+    .daily-card th, .daily-card td {
+      padding: .20rem .32rem;
+      font-weight: 700; /* <<< Cambia a 600/500 si no quieres tan negrita */
+    }
     .daily-card tbody tr { cursor:pointer; }
     .daily-card tbody tr:hover { background:#f1f3f5; }
-    .daily-card td:first-child { text-align: left; }     /* fecha */
-    .daily-card td:nth-child(2) { text-align: center; }  /* número centrado */
+    .daily-card td:first-child { text-align: left; }     /* FECHA */
+    .daily-card td:nth-child(2),
+    .daily-card td:nth-child(3) { text-align: center; }  /* GESTIONES / SIN EVID. */
 
     /* KPIs lineales */
     .kpi-bar .badge{font-size:.88rem;padding:.45rem .6rem}
@@ -71,6 +70,15 @@
     @media (max-width: 991px){
       #map{height:52vh}
     }
+
+    /* Mensajes vacíos/errores */
+    .empty-note{ color:#6c757d; font-size:.9rem; }
+    .error-note{ color:#b02a37; font-weight:600; }
+
+    /* SOCIOS SIN EVIDENCIAS (debajo del mapa) */
+    #noEvWrap h2 { font-size: .95rem; }
+    #tblNoEv { font-size: .76rem; } /* <<< CAMBIA AQUÍ el tamaño de la tabla de “sin evidencias” */
+    #tblNoEv th, #tblNoEv td { vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -78,8 +86,8 @@
     <header class="mb-3">
       <h1 class="h4 mb-1">Seguimiento de Gestores - Acreimex -</h1>
       <p class="smallnote mb-0">
-        Reporte muestra actividad de L-V 08:00 am – 19:00 y Sáb de 08.00 AM A 15:00 PM.
-        Para el Proceso se considera Horario Laboral: L–V 09:00 am – 18:00 y Sáb de 09.00 AM A 14:00 PM.
+        Reporte muestra actividad de L-V 08:00–19:00 y Sáb 08:00–15:00.<br>
+        Proceso (laboral): L–V 09:00–18:00 (sin 14:00) y Sáb 09:00–14:00.
       </p>
     </header>
 
@@ -87,11 +95,9 @@
     <section class="card mb-3">
       <div class="card-body">
         <div class="row g-3 align-items-end">
-          <!-- Usuario estrecho -->
           <div class="col-12 col-md-3">
             <label class="form-label">Usuario</label>
             <select id="userSelect" class="form-select"><option value="">(Selecciona)</option></select>
-            
           </div>
           <div class="col-12 col-md-4 col-lg-3">
             <label class="form-label">Sucursal</label>
@@ -107,10 +113,9 @@
           </div>
           <div class="col-12 col-lg-4 d-grid d-md-flex gap-2">
             <button id="btnRender" class="btn btn-success flex-fill">Generar Reporte</button>
-            <button id="btnCompact" class="btn btn-outline-secondary">Modo compacto</button>
           </div>
         </div>
-      
+        <div id="loadMsg" class="mt-2 empty-note"></div>
       </div>
     </section>
 
@@ -120,7 +125,6 @@
         <div>
           <span class="badge rounded-pill text-bg-secondary" id="badgeRows">0 GESTIONES</span>
         </div>
-        
       </div>
       <div class="scroll-x">
         <table id="grid" class="table table-grid table-sm">
@@ -142,17 +146,16 @@
       </div>
     </section>
 
-    <!-- Gestiones diarias — 5 columnas -->
+    <!-- Gestiones diarias — 4 columnas -->
     <section class="mb-3">
-      <div class="row row-cols-1 row-cols-md-3 row-cols-lg-5 g-3">
+      <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
         <!-- A -->
         <div class="col">
           <div class="card h-100 daily-card">
             <div class="card-body">
-             
               <div class="scroll-x">
                 <table id="tblDailyA" class="table table-sm table-striped mb-0">
-                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th><th>SIN EVID.</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -163,10 +166,9 @@
         <div class="col">
           <div class="card h-100 daily-card">
             <div class="card-body">
-             
               <div class="scroll-x">
                 <table id="tblDailyB" class="table table-sm table-striped mb-0">
-                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th><th>SIN EVID.</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -177,10 +179,9 @@
         <div class="col">
           <div class="card h-100 daily-card">
             <div class="card-body">
-              
               <div class="scroll-x">
                 <table id="tblDailyC" class="table table-sm table-striped mb-0">
-                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th><th>SIN EVID.</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -193,20 +194,7 @@
             <div class="card-body">
               <div class="scroll-x">
                 <table id="tblDailyD" class="table table-sm table-striped mb-0">
-                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- E -->
-        <div class="col">
-          <div class="card h-100 daily-card">
-            <div class="card-body">
-              <div class="scroll-x">
-                <table id="tblDailyE" class="table table-sm table-striped mb-0">
-                  <thead><tr><th>FECHA</th><th>GESTIONES</th></tr></thead>
+                  <thead><tr><th>FECHA</th><th>GESTIONES</th><th>SIN EVID.</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -217,11 +205,10 @@
       </div>
     </section>
 
-    <!-- MAPA -->
+    <!-- MAPA + Socios sin evidencias -->
     <section class="card mb-3">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center">
-          
           <button class="btn btn-outline-primary btn-sm d-lg-none" type="button"
                   data-bs-toggle="collapse" data-bs-target="#mapCollapse"
                   aria-expanded="false" aria-controls="mapCollapse" id="btnToggleMap">
@@ -231,6 +218,30 @@
 
         <div id="mapCollapse" class="collapse mt-2">
           <div id="map"></div>
+        </div>
+
+        <!-- Tabla debajo del mapa -->
+        <div id="noEvWrap" class="mt-3">
+          <h2 class="h6 mb-2">
+            Socios gestionados <span class="text-danger">sin evidencias</span>
+            <span id="noEvCount" class="badge text-bg-danger ms-1">0</span>
+          </h2>
+          <div class="scroll-x">
+            <table id="tblNoEv" class="table table-sm table-striped">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Socio</th>
+                  <th>Hora</th>
+                  <th>Acción</th>
+                  <th>Status</th>
+                  <th>Mapa</th> <!-- <<<< AQUÍ: reemplaza Lat/Lon por Mapa -->
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="noEvEmpty" class="empty-note"></div>
         </div>
       </div>
     </section>
@@ -247,7 +258,6 @@
                 <tbody></tbody>
               </table>
             </div>
-            
           </div>
         </div>
       </div>
@@ -261,7 +271,6 @@
                 <tbody></tbody>
               </table>
             </div>
-            
           </div>
         </div>
       </div>
@@ -274,17 +283,24 @@
 
 <script>
   // ===== Config =====
-  const JSON_URL = "https://raw.githubusercontent.com/alcnca/rutasgestores/main/gestores.json";
+  const JSON_URLS = [
+    "https://raw.githubusercontent.com/alcnca/rutasgestores/main/gestores.json",
+    "https://raw.githubusercontent.com/alcnca/rutasgestores/refs/heads/main/gestores.json" // fallback
+  ];
   const HOUR_START = 8;  // vista
   const HOUR_END   = 19; // vista
   const HOURS = Array.from({length: HOUR_END - HOUR_START + 1}, (_, i) => HOUR_START + i);
 
   // ===== Utils =====
   const uniq = arr => Array.from(new Set(arr));
-  const by = (a,b) => a.localeCompare(b,'es');
+  const by = (a,b) => (a||"").toString().localeCompare((b||"").toString(),'es');
   const pad2 = n => String(n).padStart(2,'0');
   const hourLabel = h => `${pad2(h)}:00`;
-  const normalizeHourStr = s => (s||'').replace(/\s+/g,' ').replace('a. m.','AM').replace('p. m.','PM').replace('a. m','AM').replace('p. m','PM').trim();
+  const normalizeHourStr = s => (s||'')
+      .replace(/\s+/g,' ')
+      .replace('a. m.','AM').replace('p. m.','PM')
+      .replace('a. m','AM').replace('p. m','PM')
+      .trim();
   function parseTimeToHourBase(str){
     if(!str) return null; const s = normalizeHourStr(str).toUpperCase();
     const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/); if(!m) return null;
@@ -294,22 +310,41 @@
   }
   function toISODate(dstr){
     if(!dstr) return '';
-    if(/^\d{4}-\d{2}-\d{2}$/.test(dstr)) return dstr;
-    const m = dstr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(m) return `${m[3]}-${m[2]}-${m[1]}`;
-    const d = new Date(dstr); if(Number.isNaN(d.getTime())) return '';
+    const s = (dstr+'').trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(m) return `${m[3]}-${m[2]}-${m[1]}`;
+    const d = new Date(s); if(Number.isNaN(d.getTime())) return '';
     return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   }
-  const roundCoord = (v,dec)=>{ const p=Math.pow(10,dec); return Math.round(Number(v)*p)/p; };
+  const roundCoord = (v,dec)=>{ const num = Number(v); if(Number.isNaN(num)) return null; const p=Math.pow(10,dec); return Math.round(num*p)/p; };
   const dowOfISO = iso => new Date(iso+'T00:00:00').getDay();
 
-  // HORARIO VISUAL: L–V 09–18 (sin 14); Sáb 09–14
+  // ===== Evidencia (a partir de STATUS) =====
+  function isNoEvidenceStatus(statusRaw){
+    const s = (statusRaw || '').toString().trim().toUpperCase();
+    if(!s) return true; // vacío = sin evidencia
+    if (s === 'SIN EVIDENCIA' || s === 'SIN EVIDENCIAS') return true;
+    if (s === 'NO' || s === 'N/A' || s === 'NA' || s === 'PENDIENTE') return true;
+    if (/^NO\b/.test(s)) return true;
+    if (/SIN\s+EVIDEN/.test(s)) return true;
+    return false;
+  }
+  function accionCuentaComoEvidencia(accionRaw){
+    const a = (accionRaw || '').toString().trim().toUpperCase();
+    return (a.includes('ALTA') && a.includes('DIGI')); // "ALTA DIGITALIZACION"
+  }
+  function hasEvidence(row){
+    if (accionCuentaComoEvidencia(row['ACCION'])) return true;
+    return !isNoEvidenceStatus(row['STATUS']);
+  }
+
+  // Horarios
   function workHoursForDate(iso){
     const dow = dowOfISO(iso); const set = new Set();
     if (dow >= 1 && dow <= 5) { for (let h = 9; h <= 18; h++) if(h!==14) set.add(h); }
     else if (dow === 6) { for (let h = 9; h <= 14; h++) set.add(h); }
     return set;
   }
-  // HORARIO PARA CONTEO: L–V 09–17 (sin 14); Sáb 09–14
   function countHoursForDate(iso){
     const dow = dowOfISO(iso); const set = new Set();
     if (dow >= 1 && dow <= 5) { for (let h = 9; h <= 17; h++) if(h!==14) set.add(h); }
@@ -338,28 +373,46 @@
     });
   }
 
-  // ====== Carga de datos ======
+  // ====== Carga de datos (con fallback) ======
   async function loadRemoteJson(){
-    try{
-      const res = await fetch(`${JSON_URL}?t=${Date.now()}`, {mode:'cors', cache:'no-store'});
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const norm=o=>{const n={}; for(const k of Object.keys(o)){ n[k.toUpperCase()]=o[k]; } return n; };
-      rawRows = (Array.isArray(data)?data:(data?.rows||[])).map(norm);
+    const loadMsg = document.getElementById('loadMsg');
+    loadMsg.textContent = 'Cargando JSON…';
+    let lastErr = null;
 
-      // Usuarios
-      const users = uniq(rawRows.map(getUserField).filter(Boolean)).sort(by);
-      const userSel = document.getElementById('userSelect');
-      userSel.innerHTML = users.length
-        ? '<option value="">(Selecciona)</option>' + users.map(v=>`<option>${v}</option>`).join('')
-        : '<option value="">(Sin usuarios)</option>';
+    for(const url of JSON_URLS){
+      try{
+        const res = await fetch(`${url}?t=${Date.now()}`, {mode:'cors', cache:'no-store'});
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
-      // Sucursales (según usuario elegido)
-      document.getElementById('fltSucursal').innerHTML = '<option value="">(Todas)</option>';
-    }catch(err){
-      console.error(err);
-      alert('No se pudo cargar el JSON remoto.');
+        const norm=o=>{const n={}; for(const k of Object.keys(o)){ n[k.toUpperCase()]=o[k]; } return n; };
+        rawRows = (Array.isArray(data)?data:(data?.rows||[])).map(norm);
+
+        if(!Array.isArray(rawRows) || rawRows.length===0){
+          console.warn('JSON cargado pero vacío desde:', url, data);
+          continue; // prueba el siguiente URL
+        }
+
+        // Usuarios
+        const users = uniq(rawRows.map(getUserField).filter(Boolean)).sort(by);
+        const userSel = document.getElementById('userSelect');
+        userSel.innerHTML = users.length
+          ? '<option value="">(Selecciona)</option>' + users.map(v=>`<option>${v}</option>`).join('')
+          : '<option value="">(Sin usuarios)</option>';
+
+        document.getElementById('fltSucursal').innerHTML = '<option value="">(Todas)</option>';
+
+        loadMsg.textContent = `JSON cargado (${rawRows.length} filas)`;
+        return; // éxito
+      }catch(err){
+        console.error('Fallo cargando', url, err);
+        lastErr = err;
+      }
     }
+
+    // Si llega aquí, fallaron ambas rutas
+    loadMsg.innerHTML = `<span class="error-note">No se pudo cargar el JSON remoto.</span> Revisa que el archivo exista y sea público.`;
+    rawRows = [];
   }
 
   // ========= Auxiliares de filtros =========
@@ -376,6 +429,16 @@
     const desde=document.getElementById('fltDesde').value;
     const hasta=document.getElementById('fltHasta').value;
     const dec=5;
+
+    if(!rawRows.length){
+      document.getElementById('badgeRows').textContent = `0 Gestiones`;
+      document.querySelector('#grid thead').innerHTML = '';
+      document.querySelector('#grid tbody').innerHTML = '';
+      ['#tblDailyA','#tblDailyB','#tblDailyC','#tblDailyD','#tblGaps','#tblSpots'].forEach(sel=>{
+        const tb=document.querySelector(`${sel} tbody`); if(tb) tb.innerHTML='';
+      });
+      return;
+    }
 
     const pre = rawRows.map(r=>{
       const horaSrc=(r['HORA2']&&r['HORA2'].toString().trim()!=='')? r['HORA2'] : r['HORA'];
@@ -396,7 +459,6 @@
 
     document.getElementById('badgeRows').textContent = `${rowsF.length} Gestiones`;
 
-    // groups
     const mapG=new Map();
     for(const r of rowsF){
       if(r._hourBase==null) continue;
@@ -409,8 +471,16 @@
     const groups=Array.from(mapG.values()).sort((a,b)=> by(a.usuario,b.usuario)||by(a.fecha,b.fecha));
     document.getElementById('badgeGroups').textContent = `${groups.length} Dias Con Gestiones`;
 
-    // KPIs + diario (6 columnas)
-    const dailyMap=new Map(); for(const r of rowsF){ const d=r._fecha; dailyMap.set(d,(dailyMap.get(d)||0)+1); }
+    // ===== KPIs + diario (con SIN EVID.) =====
+    const dailyMap = new Map();
+    for (const r of rowsF){
+      const d = r._fecha;
+      const obj = dailyMap.get(d) || { total: 0, noEv: 0 };
+      obj.total += 1;
+      if (!hasEvidence(r)) obj.noEv += 1;
+      dailyMap.set(d, obj);
+    }
+
     const totalGest=rowsF.length;
     const workdays=countWorkdays(desde,hasta);
     const avg=workdays? totalGest/workdays : 0;
@@ -419,7 +489,9 @@
     document.getElementById('kpiProm').textContent=avg.toFixed(2);
 
     const entries = Array.from(dailyMap.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
-    const DAILY_COLS = 5;
+
+    // 4 columnas
+    const DAILY_COLS = 4;
     const size = Math.ceil(entries.length / DAILY_COLS);
     const chunk = (arr, s, i)=> arr.slice(i*s, (i+1)*s);
 
@@ -428,25 +500,23 @@
       chunk(entries, size, 1),
       chunk(entries, size, 2),
       chunk(entries, size, 3),
-      chunk(entries, size, 4),
-      ];
+    ];
 
     const tbs = [
       document.querySelector('#tblDailyA tbody'),
       document.querySelector('#tblDailyB tbody'),
       document.querySelector('#tblDailyC tbody'),
       document.querySelector('#tblDailyD tbody'),
-      document.querySelector('#tblDailyE tbody'),
-      ];
+    ];
     tbs.forEach(tb=> tb && (tb.innerHTML=''));
 
-    const rowTpl = ([fecha,cnt]) => `<tr data-fecha="${fecha}"><td>${fecha}</td><td>${cnt}</td></tr>`;
+    const rowTpl = ([fecha,obj]) => `<tr data-fecha="${fecha}"><td>${fecha}</td><td>${obj.total}</td><td>${obj.noEv}</td></tr>`;
     cols.forEach((c,idx)=> c.forEach(e=> tbs[idx] && tbs[idx].insertAdjacentHTML('beforeend', rowTpl(e))));
 
     // same spot count
     const spotCount=new Map(); for(const r of rowsF){ const k=r._spotKey; spotCount.set(k,(spotCount.get(k)||0)+1); }
 
-    // header
+    // header de la matriz horaria
     const thead=document.querySelector('#grid thead'); const tbody=document.querySelector('#grid tbody');
     thead.innerHTML=''; tbody.innerHTML='';
     const trh=document.createElement('tr');
@@ -456,7 +526,7 @@
     }
     thead.appendChild(trh);
 
-    // body con vacíos
+    // cuerpo
     const gapsRows=[];
     for(const g of groups){
       const tr=document.createElement('tr');
@@ -470,7 +540,6 @@
       const cntSet = countHoursForDate(g.fecha);
       const emptiesVisual = HOURS.filter(h => wkSet.has(h) && !g.hours.has(h));
 
-      // sugerida cerca de 14:00 (L–V)
       let greenHour=null; const dow=dowOfISO(g.fecha);
       if(dow>=1&&dow<=5&&emptiesVisual.length){
         greenHour=emptiesVisual.reduce((best,h)=>{
@@ -503,7 +572,7 @@
       gapsRows.push({usuario:g.usuario,fecha:g.fecha,count:emptiesReportHours.length,list:emptiesReportHours.map(hourLabel).join(', ')});
     }
 
-    // highlight columna
+    // click en hora para resaltar columna
     thead.querySelectorAll('th[data-hour]').forEach(th=>{
       th.addEventListener('click',()=>{
         const hour=Number(th.dataset.hour);
@@ -543,13 +612,13 @@
       }
     }
 
-    // CLICK EN GESTIONES DIARIAS -> actualizar mapa SIN mover la página
+    // CLICK EN GESTIONES DIARIAS -> actualizar mapa + sin evidencias
     const onDailyClick = (ev)=>{
       const tr = ev.target.closest('tr');
       if(!tr || !tr.dataset.fecha) return;
       actualizarMapa(tr.dataset.fecha);
     };
-    ['#tblDailyA','#tblDailyB','#tblDailyC','#tblDailyD','#tblDailyE'].forEach(sel=>{
+    ['#tblDailyA','#tblDailyB','#tblDailyC','#tblDailyD'].forEach(sel=>{
       document.querySelectorAll(`${sel} tbody tr`).forEach(tr=> tr.addEventListener('click', onDailyClick));
     });
 
@@ -557,53 +626,105 @@
     if (entries.length) actualizarMapa(entries[0][0]);
   }
 
-  // ========= MAPA =========
+  // ========= MAPA + “SIN EVIDENCIAS” =========
   function actualizarMapa(fecha){
     const suc = document.getElementById("fltSucursal").value;
     const user = document.getElementById("userSelect").value;
     if(!user || !fecha) return;
 
+    // Limpia capa previa
     if (currentRoute) { map.removeLayer(currentRoute); currentRoute = null; }
     currentMarkers.forEach(m => map.removeLayer(m));
     currentMarkers = [];
 
+    // Filtra registros válidos con coords numéricas
     const registros = rawRows
       .filter(r => getUserField(r)===user &&
                    (!suc || (r['SUCURSAL']||'').toString().trim()===suc) &&
                    toISODate(r['FECHA_GESTION']||r['FECHA']||'') === fecha)
-      .map(r => ({...r, _h: normalizeHourStr((r['HORA2']||r['HORA']||'')+'' )}))
+      .map(r => ({...r,
+        _lat: Number(r.LATITUD),
+        _lon: Number(r.LONGITUD),
+        _h: normalizeHourStr((r['HORA2']||r['HORA']||'')+'' )
+      }))
+      .filter(r => Number.isFinite(r._lat) && Number.isFinite(r._lon))
       .sort((a,b) => a._h.localeCompare(b._h));
 
-    if(!registros.length) return;
+    // === MAPA ===
+    if(registros.length){
+      const coords = registros.map(r => [r._lat, r._lon]);
 
-    const coords = registros.map(r => [parseFloat(r.LATITUD), parseFloat(r.LONGITUD)]);
+      if(!map){
+        map = L.map("map", { zoomControl: false }).setView(coords[0], 12);
+        L.control.zoom({ position: "bottomright" }).addTo(map);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
+        // abrir mapa por defecto en desktop
+        const collEl = document.getElementById('mapCollapse');
+        const coll = new bootstrap.Collapse(collEl, { toggle:false });
+        if (window.innerWidth >= 992) coll.show();
+        setTimeout(()=> map.invalidateSize(), 150);
+      }else{
+        map.setView(coords[0], 12, {animate:true});
+      }
 
-    if(!map){
-      map = L.map("map", { zoomControl: false }).setView([19.4326, -99.1332], 12);
-      L.control.zoom({ position: "bottomright" }).addTo(map);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
-      // abrir mapa por defecto en desktop
-      const collEl = document.getElementById('mapCollapse');
-      const coll = new bootstrap.Collapse(collEl, { toggle:false });
-      if (window.innerWidth >= 992) coll.show();
+      currentRoute = L.polyline(coords, { color }).addTo(map);
+      setTimeout(()=>{ map.flyToBounds(currentRoute.getBounds(), {padding:[40,40], duration:.7}); }, 150);
+
+      registros.forEach((r,i)=>{
+        const icono = crearIcono(i+1, color);
+        const marker = L.marker([r._lat, r._lon], {icon:icono})
+          .bindPopup(`<b>${i+1}. ${(r.NOMBRE_COMPLETO||'').toString()}</b><br>
+                      Hora: ${(r.HORA2||r.HORA||'').toString()}<br>
+                      Acción: ${(r.ACCION||'').toString()}<br>
+                      Sucursal: ${(r.SUCURSAL||'').toString()}<br>
+                      Status: ${(r.STATUS||'').toString()}`);
+        marker.addTo(map);
+        currentMarkers.push(marker);
+      });
     }
 
-    const first = coords[0];
-    map.setView(first, 14, {animate:true});
+    // === TABLA “SIN EVIDENCIAS” (debajo del mapa) ===
+    const noEvBody = document.querySelector('#tblNoEv tbody');
+    const noEvEmpty = document.getElementById('noEvEmpty');
+    const noEvCount = document.getElementById('noEvCount');
+    noEvBody.innerHTML = '';
+    noEvEmpty.textContent = '';
 
-    currentRoute = L.polyline(coords, { color }).addTo(map);
-    setTimeout(()=>{ map.flyToBounds(currentRoute.getBounds(), {padding:[40,40], duration:.7}); }, 150);
+    const registrosSinEv = registros.filter(r => !hasEvidence(r));
+    noEvCount.textContent = registrosSinEv.length;
 
-    registros.forEach((r,i)=>{
-      const icono = crearIcono(i+1, color);
-      const marker = L.marker([r.LATITUD, r.LONGITUD], {icon:icono})
-        .bindPopup(`<b>${i+1}. ${(r.NOMBRE_COMPLETO||'').toString()}</b><br>
-                    Hora: ${(r.HORA2||r.HORA||'').toString()}<br>
-                    Acción: ${(r.ACCION||'').toString()}<br>
-                    Sucursal: ${(r.SUCURSAL||'').toString()}`);
-      marker.addTo(map);
-      currentMarkers.push(marker);
-    });
+    if(!registros.length){
+      noEvEmpty.textContent = 'No hay gestiones para la fecha seleccionada.';
+      return;
+    }
+    if(registrosSinEv.length === 0){
+      noEvEmpty.textContent = 'No hay registros sin evidencias para esta fecha.';
+      return;
+    }
+
+    // Utilidad para armar el link a Google Maps
+    const mapsHref = (lat, lon) => `https://www.google.com/maps?q=${encodeURIComponent(lat)},${encodeURIComponent(lon)}`;
+
+    // Fila con icono/botón que abre Google Maps
+    const fila = (i, r) => `
+      <tr>
+        <td>${i+1}</td>
+        <td>${(r.NOMBRE_COMPLETO||'').toString()}</td>
+        <td>${(r.HORA2||r.HORA||'').toString()}</td>
+        <td>${(r.ACCION||'').toString()}</td>
+        <td>${(r.STATUS||'').toString()}</td>
+        <td>
+          ${
+            (Number.isFinite(r._lat) && Number.isFinite(r._lon))
+            ? `<a href="${mapsHref(r._lat, r._lon)}" target="_blank" rel="noopener"
+                  class="btn btn-sm btn-outline-primary rounded-circle d-inline-flex align-items-center justify-content-center"
+                  style="width:28px;height:28px" title="Abrir en Google Maps">📍</a>`
+            : `<span class="text-muted">—</span>`
+          }
+        </td>
+      </tr>
+    `;
+    registrosSinEv.forEach((r,i)=> noEvBody.insertAdjacentHTML('beforeend', fila(i,r)));
   }
 
   // ===== Eventos =====
@@ -614,11 +735,6 @@
     sel.innerHTML='<option value="">(Todas)</option>'+sucs.map(v=>`<option>${v}</option>`).join('');
   });
   document.getElementById('btnRender').addEventListener('click', buildMatrix);
-
-  // Toggle compacto
-  document.getElementById('btnCompact').addEventListener('click', ()=>{
-    document.getElementById('grid').classList.toggle('compact');
-  });
 
   // Invalidate Leaflet cuando el collapse se muestra/oculta (en móvil)
   document.addEventListener('shown.bs.collapse', (ev)=>{
@@ -651,7 +767,7 @@
 
     const userSel=document.getElementById('userSelect');
     if(userSel.options.length>1){
-      userSel.selectedIndex=1;
+      userSel.selectedIndex=1; // selecciona el primer usuario real
       const user=userSel.value;
       const sucs=user? sucursalesForUser(user):[];
       const sel=document.getElementById('fltSucursal');
